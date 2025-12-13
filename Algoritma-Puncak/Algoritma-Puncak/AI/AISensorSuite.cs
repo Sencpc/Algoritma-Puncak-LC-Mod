@@ -30,11 +30,14 @@ namespace AlgoritmaPuncakMod.AI
                 float noise = Mathf.Clamp01(snapshot.VelocityMagnitude * 0.25f);
                 blackboard.UpdatePlayerInfo(enemy.transform.position, snapshot.Position, snapshot.CameraForward, visible, noise, snapshot.VelocityMagnitude, deltaTime);
                 EmitTargetDiagnostics(enemy, enemyId, snapshot, visible);
+                ProcessSporeLizardStimuli(enemy, blackboard, snapshot, visible);
+                ProcessMaskedStimuli(enemy, blackboard, snapshot, visible);
             }
             else
             {
                 blackboard.MarkPlayerLost(deltaTime);
                 EmitTargetDiagnostics(enemy, enemyId, null, false);
+                ProcessMaskedStimuli(enemy, blackboard, null, false);
             }
 
             var allies = CollectNearbyAllies(enemy, profile.PackCohesionRadius);
@@ -198,6 +201,73 @@ namespace AlgoritmaPuncakMod.AI
             }
         }
 
+        private void ProcessSporeLizardStimuli(EnemyAI enemy, AIBlackboard blackboard, PlayerSnapshot snapshot, bool hasLineOfSight)
+        {
+            if (!(enemy is PufferAI) || snapshot == null)
+            {
+                return;
+            }
+
+            blackboard.TouchSporeThreat(snapshot.Position, hasLineOfSight);
+            if (snapshot.MovementDirection.sqrMagnitude > 0.01f)
+            {
+                blackboard.RecordSporeFootsteps(snapshot.MovementDirection);
+            }
+        }
+
+        private void ProcessMaskedStimuli(EnemyAI enemy, AIBlackboard blackboard, PlayerSnapshot snapshot, bool hasLineOfSight)
+        {
+            if (!(enemy is MaskedPlayerEnemy))
+            {
+                return;
+            }
+
+            if (snapshot == null)
+            {
+                blackboard.SetMaskedIsolation(false);
+                blackboard.ClearMaskedIntercept();
+                return;
+            }
+
+            bool isolated = true;
+            foreach (var other in _playerSnapshots.Values)
+            {
+                if (other == null || other.PlayerId == snapshot.PlayerId)
+                {
+                    continue;
+                }
+
+                if (Vector3.Distance(snapshot.Position, other.Position) < 11f)
+                {
+                    isolated = false;
+                    break;
+                }
+            }
+
+            blackboard.SetMaskedIsolation(isolated);
+
+            Vector3 heading = snapshot.MovementDirection.sqrMagnitude > 0.01f
+                ? snapshot.MovementDirection
+                : snapshot.CameraForward;
+            heading.y = 0f;
+            if (heading.sqrMagnitude < 0.01f)
+            {
+                heading = Vector3.forward;
+            }
+            else
+            {
+                heading.Normalize();
+            }
+
+            float predictionDistance = Mathf.Clamp(snapshot.VelocityMagnitude * 0.65f, 1.25f, 7f);
+            blackboard.SetMaskedIntercept(snapshot.Position + heading * predictionDistance);
+
+            if (!hasLineOfSight && Vector3.Distance(enemy.transform.position, snapshot.Position) <= 9f)
+            {
+                blackboard.BeginMaskedLoiter(snapshot.Position);
+            }
+        }
+
         private void EmitTargetDiagnostics(EnemyAI enemy, int enemyId, PlayerSnapshot snapshot, bool visible)
         {
             if (!AlgoritmaPuncakMod.DebugInstrumentation)
@@ -264,6 +334,7 @@ namespace AlgoritmaPuncakMod.AI
             internal Vector3 CameraForward { get; private set; } = Vector3.forward;
             internal int PlayerId { get; }
             internal string PlayerName { get; private set; } = "Unknown";
+            internal Vector3 MovementDirection { get; private set; } = Vector3.zero;
 
             internal void Update(PlayerControllerB player, Vector3 cameraForward, float deltaTime)
             {
@@ -289,6 +360,14 @@ namespace AlgoritmaPuncakMod.AI
                 if (deltaTime > 0f)
                 {
                     VelocityMagnitude = displacement.magnitude / deltaTime;
+                    if (displacement.magnitude > 0.05f)
+                    {
+                        MovementDirection = displacement.normalized;
+                    }
+                    else if (deltaTime > 0.35f)
+                    {
+                        MovementDirection = Vector3.zero;
+                    }
                 }
 
                 HandleNoise(player, displacement, deltaTime);

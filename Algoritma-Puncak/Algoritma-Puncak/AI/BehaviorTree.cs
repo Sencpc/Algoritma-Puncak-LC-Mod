@@ -4,6 +4,7 @@ using HarmonyLib;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.AI;
+using AlgoritmaPuncakMod.AI.SporeLizard;
 
 namespace AlgoritmaPuncakMod.AI
 {
@@ -28,6 +29,9 @@ namespace AlgoritmaPuncakMod.AI
             Baboon = enemy as BaboonBirdAI;
             SandWorm = enemy as SandWormAI;
             MouthDog = enemy as MouthDogAI;
+            SnareFlea = enemy as CentipedeAI;
+            SporeLizard = enemy as PufferAI;
+            Masked = enemy as MaskedPlayerEnemy;
         }
 
         internal EnemyAI Enemy { get; }
@@ -40,6 +44,9 @@ namespace AlgoritmaPuncakMod.AI
         internal BaboonBirdAI Baboon { get; }
         internal SandWormAI SandWorm { get; }
         internal MouthDogAI MouthDog { get; }
+        internal CentipedeAI SnareFlea { get; }
+        internal PufferAI SporeLizard { get; }
+        internal MaskedPlayerEnemy Masked { get; }
         internal AIBalanceProfile Profile { get; private set; }
         internal float DeltaTime { get; private set; }
         internal string ActiveAction { get; private set; }
@@ -593,6 +600,21 @@ namespace AlgoritmaPuncakMod.AI
                 return CreateMouthDogTree();
             }
 
+            if (enemy is CentipedeAI)
+            {
+                return CreateSnareFleaTree();
+            }
+
+            if (enemy is PufferAI)
+            {
+                return CreateSporeLizardTree();
+            }
+
+            if (enemy is MaskedPlayerEnemy)
+            {
+                return CreateMaskedTree();
+            }
+
             return CreateDefaultTree();
         }
 
@@ -674,6 +696,43 @@ namespace AlgoritmaPuncakMod.AI
                     new BTConditionNode("HoarderNestThreat", HoarderConditions.NestCompromised),
                     new BTActionNode("HoarderMoveNest", HoarderActions.MigrateNest)),
                 new BTActionNode("HoarderSearch", HoarderActions.SearchForItems));
+        }
+
+        private static BTNode CreateSnareFleaTree()
+        {
+            return new BTPrioritySelector("SnareFleaRoot",
+                new BTSequence("SnarePanic",
+                    new BTConditionNode("SnareInPanic", SnareFleaConditions.InPanic),
+                    new BTActionNode("SnarePanicAction", SnareFleaActions.NavigatePanic)),
+                new BTSequence("SnareDrop",
+                    new BTConditionNode("SnareDropOpportunity", SnareFleaConditions.PlayerInDropZone),
+                    new BTActionNode("SnareDropExec", SnareFleaActions.ExecuteDrop)),
+                new BTSequence("SnareAcquire",
+                    new BTConditionNode("SnareNeedsAmbush", SnareFleaConditions.NeedsAmbush),
+                    new BTActionNode("SnarePlan", SnareFleaActions.PlanAmbush)),
+                new BTSequence("SnareApproach",
+                    new BTConditionNode("SnareRequiresApproach", SnareFleaConditions.RequiresApproach),
+                    new BTActionNode("SnareTravel", SnareFleaActions.TravelToAmbush),
+                    new BTActionNode("SnareLatch", SnareFleaActions.AttemptCeilingLatch)),
+                new BTSequence("SnareHold",
+                    new BTConditionNode("SnareHolding", SnareFleaConditions.OnAmbushHold),
+                    new BTActionNode("SnareHoldAction", SnareFleaActions.HoldAmbush)),
+                new BTActionNode("SnareFallback", SnareFleaActions.Roam));
+        }
+
+        private static BTNode CreateSporeLizardTree()
+        {
+            return new BTPrioritySelector("SporeLizardRoot",
+                new BTSequence("SporeCornered",
+                    new BTConditionNode("SporeCorneredCheck", SporeLizard.SporeLizardConditions.Cornered),
+                    new BTActionNode("SporeCorneredAction", SporeLizard.SporeLizardActions.ExecuteCorneredBurst)),
+                new BTSequence("SporeIntimidation",
+                    new BTConditionNode("SporeShouldIntimidate", SporeLizard.SporeLizardConditions.ShouldIntimidate),
+                    new BTActionNode("SporeIntimidateAction", SporeLizard.SporeLizardActions.ExecuteIntimidation)),
+                new BTSequence("SporeOcclusion",
+                    new BTConditionNode("SporeNeedsOcclusion", SporeLizard.SporeLizardConditions.NeedsOcclusion),
+                    new BTActionNode("SporeSeekOcclusion", SporeLizard.SporeLizardActions.SeekOcclusion)),
+                new BTActionNode("SporeSkulk", SporeLizard.SporeLizardActions.PerformSkulk));
         }
 
     }

@@ -11,6 +11,9 @@ namespace AlgoritmaPuncakMod.AI
         partial void TickBlobSystems(float deltaTime);
         partial void TickFlowermanSystems(float deltaTime);
         partial void TickHoarderSystems(float deltaTime);
+        partial void TickSnareSystems(float deltaTime);
+        partial void TickSporeLizardSystems(float deltaTime);
+        partial void TickMaskedSystems(float deltaTime);
         partial void TickCoilheadSystems(float deltaTime);
         partial void TickBaboonSystems(float deltaTime);
         partial void TickSandWormSystems(float deltaTime);
@@ -98,6 +101,9 @@ namespace AlgoritmaPuncakMod.AI
             TickBlobSystems(deltaTime);
             TickFlowermanSystems(deltaTime);
             TickHoarderSystems(deltaTime);
+            TickSnareSystems(deltaTime);
+            TickSporeLizardSystems(deltaTime);
+            TickMaskedSystems(deltaTime);
             TickCoilheadSystems(deltaTime);
             TickBaboonSystems(deltaTime);
             TickSandWormSystems(deltaTime);

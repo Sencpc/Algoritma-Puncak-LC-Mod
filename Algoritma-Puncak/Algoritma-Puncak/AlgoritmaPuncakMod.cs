@@ -14,7 +14,7 @@ namespace AlgoritmaPuncakMod
     {
         public const string modGUID = "Sen2.AlgoritmaPuncakMod";
         public const string modName = "AlgoritmaPuncak"; 
-        public const string modVersion = "1.0.1";
+        public const string modVersion = "1.1.0";
 
         internal static AlgoritmaPuncakMod Instance { get; private set; }
         internal static ManualLogSource Log { get; private set; }
@@ -51,13 +51,13 @@ namespace AlgoritmaPuncakMod
         private void OnDestroy()
         {
             AIBehaviorCoordinator.Reset();
-            AssuranceSpawnDirector.Reset();
+            MoonSpawnDirector.Reset();
             _harmony?.UnpatchSelf();
         }
 
         private void Update()
         {
-            AssuranceSpawnDirector.Tick();
+            MoonSpawnDirector.Tick();
         }
 
         private void BindConfig()
