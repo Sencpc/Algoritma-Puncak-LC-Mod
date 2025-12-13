@@ -10,6 +10,8 @@ namespace AlgoritmaPuncakMod.AI
     {
         private readonly Dictionary<int, PlayerSnapshot> _playerSnapshots = new Dictionary<int, PlayerSnapshot>();
         private readonly List<EnemyAI> _allyBuffer = new List<EnemyAI>(8);
+        private readonly Dictionary<int, int> _enemyTargetMap = new Dictionary<int, int>();
+        private readonly Dictionary<int, bool> _enemyLosMap = new Dictionary<int, bool>();
         private readonly int _playerLayerMask = LayerMask.GetMask("Default", "Player", "Environment");
         private readonly SpiderIntelTracker _spiderIntel = new SpiderIntelTracker();
 
@@ -21,15 +23,18 @@ namespace AlgoritmaPuncakMod.AI
             UpdatePlayerSnapshots(enemy, trackedPlayers, deltaTime);
             var snapshot = SelectTarget(enemy.transform.position, profile.HuntAggroDistance * 1.5f);
 
+            int enemyId = enemy.GetInstanceID();
             if (snapshot != null)
             {
                 bool visible = HasLineOfSight(enemy.transform.position + Vector3.up, snapshot.Position + Vector3.up * 0.8f);
                 float noise = Mathf.Clamp01(snapshot.VelocityMagnitude * 0.25f);
-                blackboard.UpdatePlayerInfo(enemy.transform.position, snapshot.Position, snapshot.CameraForward, visible, noise, deltaTime);
+                blackboard.UpdatePlayerInfo(enemy.transform.position, snapshot.Position, snapshot.CameraForward, visible, noise, snapshot.VelocityMagnitude, deltaTime);
+                EmitTargetDiagnostics(enemy, enemyId, snapshot, visible);
             }
             else
             {
                 blackboard.MarkPlayerLost(deltaTime);
+                EmitTargetDiagnostics(enemy, enemyId, null, false);
             }
 
             var allies = CollectNearbyAllies(enemy, profile.PackCohesionRadius);
@@ -71,7 +76,7 @@ namespace AlgoritmaPuncakMod.AI
 
                 if (!_playerSnapshots.TryGetValue(id, out var snapshot))
                 {
-                    snapshot = new PlayerSnapshot(player);
+                    snapshot = new PlayerSnapshot(player, id);
                     _playerSnapshots[id] = snapshot;
                 }
 
@@ -175,15 +180,56 @@ namespace AlgoritmaPuncakMod.AI
                     continue;
                 }
 
-                if (highStrength > 0f)
+                float distance = Vector3.Distance(enemy.transform.position, position);
+                float voiceFalloff = Mathf.Clamp01(1f - Mathf.InverseLerp(5f, 28f, distance));
+                float movementFalloff = Mathf.Clamp01(1f - Mathf.InverseLerp(12f, 40f, distance));
+                float adjustedHigh = highStrength * voiceFalloff;
+                float adjustedLow = lowStrength * movementFalloff;
+
+                if (adjustedHigh > 0.05f)
                 {
-                    blackboard.RegisterMouthDogNoise(position, highStrength, highPriority: true);
+                    blackboard.RegisterMouthDogNoise(position, adjustedHigh, highPriority: true);
                 }
 
-                if (lowStrength > 0f)
+                if (adjustedLow > 0.05f)
                 {
-                    blackboard.RegisterMouthDogNoise(position, lowStrength, highPriority: false);
+                    blackboard.RegisterMouthDogNoise(position, adjustedLow, highPriority: false);
                 }
+            }
+        }
+
+        private void EmitTargetDiagnostics(EnemyAI enemy, int enemyId, PlayerSnapshot snapshot, bool visible)
+        {
+            if (!AlgoritmaPuncakMod.DebugInstrumentation)
+            {
+                return;
+            }
+
+            int trackedId = snapshot?.PlayerId ?? -1;
+            if (!_enemyTargetMap.TryGetValue(enemyId, out var previousId) || previousId != trackedId)
+            {
+                _enemyTargetMap[enemyId] = trackedId;
+                if (trackedId == -1)
+                {
+                    global::AlgoritmaPuncakMod.ModLogger.Info(string.Format("[{0}] lost target", enemy.enemyType));
+                }
+                else
+                {
+                    float distance = Vector3.Distance(enemy.transform.position, snapshot.Position);
+                    global::AlgoritmaPuncakMod.ModLogger.Info(string.Format("[{0}] tracking {1} ({2:F1}m)", enemy.enemyType, snapshot.PlayerName, distance));
+                }
+            }
+
+            if (snapshot == null)
+            {
+                _enemyLosMap.Remove(enemyId);
+                return;
+            }
+
+            if (!_enemyLosMap.TryGetValue(enemyId, out var previousLos) || previousLos != visible)
+            {
+                _enemyLosMap[enemyId] = visible;
+                global::AlgoritmaPuncakMod.ModLogger.Debug(string.Format("[{0}] LOS {1} for {2}", enemy.enemyType, visible ? "acquired" : "lost", snapshot.PlayerName));
             }
         }
 
@@ -196,13 +242,15 @@ namespace AlgoritmaPuncakMod.AI
             private float _pendingMouthDogLow;
             private float _pendingMouthDogHigh;
 
-            internal PlayerSnapshot(PlayerControllerB player)
+            internal PlayerSnapshot(PlayerControllerB player, int id)
             {
                 if (player == null)
                 {
                     return;
                 }
 
+                PlayerId = id;
+                PlayerName = player.playerUsername;
                 Position = player.transform.position;
                 _previousPosition = Position;
                 CameraForward = player.gameplayCamera != null
@@ -214,6 +262,8 @@ namespace AlgoritmaPuncakMod.AI
             internal Vector3 Position { get; private set; } = Vector3.positiveInfinity;
             internal float VelocityMagnitude { get; private set; }
             internal Vector3 CameraForward { get; private set; } = Vector3.forward;
+            internal int PlayerId { get; }
+            internal string PlayerName { get; private set; } = "Unknown";
 
             internal void Update(PlayerControllerB player, Vector3 cameraForward, float deltaTime)
             {
@@ -227,6 +277,11 @@ namespace AlgoritmaPuncakMod.AI
                 if (cameraForward.sqrMagnitude > 0.01f)
                 {
                     CameraForward = cameraForward.normalized;
+                }
+
+                if (!string.IsNullOrEmpty(player.playerUsername))
+                {
+                    PlayerName = player.playerUsername;
                 }
 
                 var displacement = newPosition - _previousPosition;
@@ -281,9 +336,11 @@ namespace AlgoritmaPuncakMod.AI
                     _pendingMouthDogLow = Mathf.Max(_pendingMouthDogLow, Mathf.Clamp01(speed / 4f));
                 }
 
-                if (PlayerNoiseIntrospection.HasActiveVoice(player))
+                float voiceLevel = PlayerNoiseIntrospection.GetVoiceLevel(player);
+                if (voiceLevel > 0f)
                 {
-                    _pendingMouthDogHigh = Mathf.Max(_pendingMouthDogHigh, 0.65f);
+                    float voiceContribution = Mathf.Lerp(0.15f, 1f, voiceLevel);
+                    _pendingMouthDogHigh = Mathf.Max(_pendingMouthDogHigh, voiceContribution);
                 }
             }
 
@@ -327,26 +384,26 @@ namespace AlgoritmaPuncakMod.AI
                 }
             }
 
-            internal static bool HasActiveVoice(PlayerControllerB player)
+            internal static float GetVoiceLevel(PlayerControllerB player)
             {
                 if (player == null || VoiceSourceField == null)
                 {
-                    return false;
+                    return 0f;
                 }
 
                 try
                 {
-                    if (VoiceSourceField.GetValue(player) is AudioSource source && source != null)
+                    if (VoiceSourceField.GetValue(player) is AudioSource source && source != null && source.isPlaying)
                     {
-                        return source.isPlaying && source.volume > 0.01f;
+                        return Mathf.Clamp01(source.volume);
                     }
                 }
                 catch
                 {
-                    return false;
+                    return 0f;
                 }
 
-                return false;
+                return 0f;
             }
         }
 

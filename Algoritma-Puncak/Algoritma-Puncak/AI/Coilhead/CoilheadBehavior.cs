@@ -223,6 +223,8 @@ namespace AlgoritmaPuncakMod.AI
 
             float bestDistance = float.MaxValue;
             Vector3 bestPosition = Vector3.positiveInfinity;
+            PlayerControllerB closestPlayer = null;
+            bool anyPlayerInsideFactory = false;
             for (int i = 0; i < scripts.Length; i++)
             {
                 var player = scripts[i];
@@ -230,6 +232,9 @@ namespace AlgoritmaPuncakMod.AI
                 {
                     continue;
                 }
+
+                bool aliveInsideFactory = !player.isPlayerDead && player.isInsideFactory;
+                anyPlayerInsideFactory |= aliveInsideFactory;
 
                 if (!coilhead.PlayerIsTargetable(player, false, false))
                 {
@@ -241,13 +246,20 @@ namespace AlgoritmaPuncakMod.AI
                 {
                     bestDistance = distance;
                     bestPosition = player.transform.position;
+                    closestPlayer = player;
                 }
             }
 
             if (!float.IsPositiveInfinity(bestPosition.x))
             {
-                context.Blackboard.SetCoilheadTarget(bestPosition, memoryDuration);
+                bool lockAggro = closestPlayer != null && !closestPlayer.isPlayerDead && closestPlayer.isInsideFactory;
+                context.Blackboard.SetCoilheadTarget(bestPosition, memoryDuration, lockAggro);
                 return true;
+            }
+
+            if (!anyPlayerInsideFactory)
+            {
+                context.Blackboard.ReleaseCoilheadAggroLock();
             }
 
             return context.Blackboard.CoilheadHasAggro && !float.IsPositiveInfinity(context.Blackboard.CoilheadTarget.x);

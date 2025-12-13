@@ -59,6 +59,7 @@ namespace AlgoritmaPuncakMod.AI
             _spiderAlertPosition = position;
             _spiderAlertTimer = urgent ? 15f : Mathf.Max(_spiderAlertTimer, 10f);
             TriggerSpiderAnger(urgent ? 20f : 12f);
+            global::AlgoritmaPuncakMod.ModLogger.Debug(string.Format("[Spider] Web disturbance at {0} (urgent: {1})", position, urgent));
         }
 
         internal void RegisterSpiderWeb(Vector3 position)
@@ -71,6 +72,7 @@ namespace AlgoritmaPuncakMod.AI
 
             point.HasWeb = true;
             point.TimeSinceServiced = 0f;
+            global::AlgoritmaPuncakMod.ModLogger.Debug(string.Format("[Spider] Registered web at {0}", point.Position));
         }
 
         internal void HandleSpiderWebRemoved(Vector3 position)
@@ -82,6 +84,7 @@ namespace AlgoritmaPuncakMod.AI
                 point.TimeSinceServiced = 0f;
                 _spiderFortifyTarget = point.Position;
                 _spiderActivePointId = point.Id;
+                global::AlgoritmaPuncakMod.ModLogger.Info(string.Format("[Spider] Web removed at {0}; scheduling rebuild", point.Position));
             }
 
             NotifySpiderWebDisturbance(position, true);
@@ -126,6 +129,7 @@ namespace AlgoritmaPuncakMod.AI
         {
             _spiderSearchTimer = Mathf.Max(_spiderSearchTimer, duration);
             TriggerSpiderAnger(duration * 0.75f);
+            global::AlgoritmaPuncakMod.ModLogger.Debug(string.Format("[Spider] Beginning search for {0:F1}s", _spiderSearchTimer));
         }
 
         internal void ClearSpiderSearch()
@@ -298,6 +302,7 @@ namespace AlgoritmaPuncakMod.AI
         internal void TriggerSpiderAnger(float durationSeconds)
         {
             _spiderAngerTimer = Mathf.Max(_spiderAngerTimer, durationSeconds);
+            global::AlgoritmaPuncakMod.ModLogger.Debug(string.Format("[Spider] Anger timer set to {0:F1}s", _spiderAngerTimer));
         }
 
         internal void CoolSpiderAnger(float durationReduction)

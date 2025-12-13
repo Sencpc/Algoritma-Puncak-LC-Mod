@@ -36,6 +36,8 @@ namespace AlgoritmaPuncakMod.AI
         private Vector3 _hoarderMigrationTarget = Vector3.positiveInfinity;
         private float _hoarderAggroGrace;
         private float _hoarderMigrationCooldown;
+        private HoarderAggroLevel _hoarderLoggedAggro = HoarderAggroLevel.None;
+        private bool _hoarderNestAnnounced;
 
         internal bool HoarderHasNest => !float.IsPositiveInfinity(_hoarderNest.x);
         internal Vector3 HoarderNest => _hoarderNest;
@@ -55,6 +57,12 @@ namespace AlgoritmaPuncakMod.AI
             if (TerritoryRadius <= 0f)
             {
                 InitializeTerritory(fallbackPosition, 15f);
+            }
+
+            if (!_hoarderNestAnnounced)
+            {
+                _hoarderNestAnnounced = true;
+                global::AlgoritmaPuncakMod.ModLogger.Info(string.Format("[Hoarder] Nest anchored at {0}", _hoarderNest));
             }
         }
 
@@ -142,6 +150,7 @@ namespace AlgoritmaPuncakMod.AI
         internal void TriggerHoarderAggro(float durationSeconds)
         {
             _hoarderAggroGrace = Mathf.Max(_hoarderAggroGrace, durationSeconds);
+            global::AlgoritmaPuncakMod.ModLogger.Debug(string.Format("[Hoarder] Aggro grace refreshed to {0:F2}s", _hoarderAggroGrace));
         }
 
         internal bool HoarderReadyToMigrate => _hoarderScanMaxRadius > 30f && _hoarderItemsLocated == 0 && _hoarderMigrationCooldown <= 0f;
@@ -215,31 +224,42 @@ namespace AlgoritmaPuncakMod.AI
             {
                 if (DistanceToPlayer <= 3f || (playerNearNest && DistanceToPlayer <= 5f))
                 {
-                    return HoarderAggroLevel.Fatal;
+                    return LogHoarderAggro(HoarderAggroLevel.Fatal);
                 }
 
                 if (DistanceToPlayer <= 8f)
                 {
-                    return HoarderAggroLevel.Hard;
+                    return LogHoarderAggro(HoarderAggroLevel.Hard);
                 }
 
                 if (DistanceToPlayer <= 12f)
                 {
-                    return HoarderAggroLevel.Soft;
+                    return LogHoarderAggro(HoarderAggroLevel.Soft);
                 }
             }
 
             if (_hoarderAggroGrace > 2f)
             {
-                return HoarderAggroLevel.Hard;
+                return LogHoarderAggro(HoarderAggroLevel.Hard);
             }
 
             if (_hoarderAggroGrace > 0f)
             {
-                return HoarderAggroLevel.Soft;
+                return LogHoarderAggro(HoarderAggroLevel.Soft);
             }
 
-            return HoarderAggroLevel.None;
+            return LogHoarderAggro(HoarderAggroLevel.None);
+        }
+
+        private HoarderAggroLevel LogHoarderAggro(HoarderAggroLevel state)
+        {
+            if (state != _hoarderLoggedAggro)
+            {
+                _hoarderLoggedAggro = state;
+                global::AlgoritmaPuncakMod.ModLogger.Info(string.Format("[Hoarder] Aggro state -> {0}", state));
+            }
+
+            return state;
         }
     }
 }

@@ -104,6 +104,7 @@
     <Compile Include="AI\SandSpider\SandSpiderBehavior.cs" />
     <Compile Include="AI\Thumper\ThumperAIBlackboard.cs" />
     <Compile Include="AI\Thumper\ThumperBehavior.cs" />
+    <Compile Include="Diagnostics\ModLogger.cs" />
     <Compile Include="AlgoritmaPuncakMod.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

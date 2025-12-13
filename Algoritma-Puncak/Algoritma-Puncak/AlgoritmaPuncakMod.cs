@@ -12,13 +12,14 @@ namespace AlgoritmaPuncakMod
     [BepInPlugin(modGUID, modName, modVersion)]
     public class AlgoritmaPuncakMod : BaseUnityPlugin
     {
-        public const string modGUID = "Sen.AlgoritmaPuncakMod";
+        public const string modGUID = "Sen2.AlgoritmaPuncakMod";
         public const string modName = "AlgoritmaPuncak"; 
-        public const string modVersion = "1.0.0.0";
+        public const string modVersion = "1.0.1";
 
         internal static AlgoritmaPuncakMod Instance { get; private set; }
         internal static ManualLogSource Log { get; private set; }
         internal static AIBalanceProfile BalanceProfile { get; private set; } = new AIBalanceProfile(5f, 12f, 18f, 3f, 12f, 25f, 10f, 1.2f);
+        internal static bool DebugInstrumentation { get; private set; }
 
         private Harmony _harmony;
 
@@ -30,6 +31,7 @@ namespace AlgoritmaPuncakMod
         private ConfigEntry<float> _lureCooldown;
         private ConfigEntry<float> _packCohesionRadius;
         private ConfigEntry<float> _reactiveMultiplier;
+        private ConfigEntry<bool> _debugInstrumentation;
 
         private void Awake()
         {
@@ -38,6 +40,7 @@ namespace AlgoritmaPuncakMod
 
             BindConfig();
             RefreshBalanceProfile();
+            ApplyDebugSettings();
 
             _harmony = new Harmony(modGUID);
             _harmony.PatchAll();
@@ -67,6 +70,7 @@ namespace AlgoritmaPuncakMod
             _lureCooldown = Config.Bind("Luring", "Cooldown", 30f, "Cooldown between lure attempts.");
             _packCohesionRadius = Config.Bind("Pack", "CohesionRadius", 10f, "Radius used to coordinate pack / swarm behaviour.");
             _reactiveMultiplier = Config.Bind("Reactive", "AggressionMultiplier", 1.35f, "Multiplier applied to reactive aggression calculations.");
+            _debugInstrumentation = Config.Bind("Debug", "EnableInstrumentation", false, "When true, the mod emits verbose AI instrumentation logs.");
 
             _stalkMinDistance.SettingChanged += OnConfigValueChanged;
             _stalkMaxDistance.SettingChanged += OnConfigValueChanged;
@@ -76,11 +80,13 @@ namespace AlgoritmaPuncakMod
             _lureCooldown.SettingChanged += OnConfigValueChanged;
             _packCohesionRadius.SettingChanged += OnConfigValueChanged;
             _reactiveMultiplier.SettingChanged += OnConfigValueChanged;
+            _debugInstrumentation.SettingChanged += OnConfigValueChanged;
         }
 
         private void OnConfigValueChanged(object sender, EventArgs e)
         {
             RefreshBalanceProfile();
+            ApplyDebugSettings();
         }
 
         private void RefreshBalanceProfile()
@@ -96,6 +102,11 @@ namespace AlgoritmaPuncakMod
                 _reactiveMultiplier.Value);
 
             AIBehaviorCoordinator.Initialize(BalanceProfile.TerritoryRadius);
+        }
+
+        private void ApplyDebugSettings()
+        {
+            DebugInstrumentation = _debugInstrumentation?.Value ?? false;
         }
     }
 

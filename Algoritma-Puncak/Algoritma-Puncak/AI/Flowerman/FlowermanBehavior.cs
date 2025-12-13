@@ -21,13 +21,14 @@ namespace AlgoritmaPuncakMod.AI
                 return false;
             }
 
-            if (context.Blackboard.FlowermanAngerReady)
+            if (context.Blackboard.FlowermanAngerReady && context.Blackboard.FlowermanStareReady)
             {
                 return true;
             }
 
             return context.Blackboard.FlowermanPlayerWatching(context.Enemy.transform.position)
-                && context.Blackboard.DistanceToPlayer <= 5f;
+                && context.Blackboard.DistanceToPlayer <= 5f
+                && context.Blackboard.FlowermanStareRatio >= 0.5f;
         }
 
         internal static bool CanStalk(BTContext context)
@@ -79,8 +80,23 @@ namespace AlgoritmaPuncakMod.AI
                 }
             }
 
+            board.AdvanceFlowermanStare(context.DeltaTime, board.DistanceToPlayer);
             float closeBoost = Mathf.Clamp01((8f - board.DistanceToPlayer) / 8f);
-            board.AddFlowermanAnger(context.DeltaTime * (1.5f + closeBoost));
+            if (board.FlowermanStareReady)
+            {
+                float stareFactor = Mathf.Lerp(0.65f, 1.25f, board.FlowermanStareRatio);
+                board.AddFlowermanAnger(context.DeltaTime * (stareFactor + closeBoost));
+            }
+            else
+            {
+                board.CoolFlowermanAnger(context.DeltaTime * 0.2f);
+            }
+
+            if (board.FlowermanPlayerTurning && !board.FlowermanHasEscape)
+            {
+                board.RequestFlowermanEscape(context.Enemy.transform.position);
+            }
+
             context.SetActiveAction("FlowermanStare");
             return BTStatus.Success;
         }
@@ -88,8 +104,11 @@ namespace AlgoritmaPuncakMod.AI
         internal static BTStatus BreakLineOfSight(BTContext context)
         {
             var board = context.Blackboard;
-            if (!board.FlowermanPlayerWatching(context.Enemy.transform.position))
+            bool watched = board.FlowermanPlayerWatching(context.Enemy.transform.position);
+            bool turning = board.FlowermanPlayerTurning;
+            if (!watched && !turning)
             {
+                board.DecayFlowermanStare(context.DeltaTime * 1.1f);
                 return BTStatus.Success;
             }
 
@@ -101,23 +120,27 @@ namespace AlgoritmaPuncakMod.AI
             var target = board.FlowermanEscapeTarget;
             if (float.IsPositiveInfinity(target.x))
             {
+                board.DecayFlowermanStare(context.DeltaTime);
                 return BTStatus.Failure;
             }
 
             if (Vector3.Distance(context.Enemy.transform.position, target) < 0.8f)
             {
                 board.CoolFlowermanAnger(context.DeltaTime * 0.2f);
+                board.DecayFlowermanStare(context.DeltaTime * 0.75f);
                 return BTStatus.Success;
             }
 
+            float fleeSpeed = turning ? 7.5f : 5.5f;
+            float fleeAccel = turning ? 14f : 10.5f;
             if (NavigationHelpers.TryMoveAgent(
                 context,
                 target,
                 3f,
                 24f,
                 "FlowermanFlee",
-                5.5f,
-                acceleration: 10.5f,
+                fleeSpeed,
+                acceleration: fleeAccel,
                 stoppingDistance: 0.4f,
                 allowPartialPath: true))
             {
@@ -134,6 +157,19 @@ namespace AlgoritmaPuncakMod.AI
             var board = context.Blackboard;
             var enemyPos = context.Enemy.transform.position;
             board.RefreshFlowermanVectors(enemyPos);
+
+            bool playerTurning = board.FlowermanPlayerTurning;
+            bool playerStill = board.PlayerVelocity <= 0.35f;
+            bool farFromPlayer = board.DistanceToPlayer > 4.75f;
+
+            if (farFromPlayer && (playerTurning || playerStill))
+            {
+                var hideStatus = HideInShadow(context, enemyPos);
+                if (hideStatus != BTStatus.Failure)
+                {
+                    return hideStatus;
+                }
+            }
 
             var blindSpot = board.FlowermanBlindSpot;
             if (!float.IsPositiveInfinity(blindSpot.x))
@@ -182,7 +218,50 @@ namespace AlgoritmaPuncakMod.AI
                 stoppingDistance: 0.6f,
                 allowPartialPath: true))
             {
+                board.DecayFlowermanStare(context.DeltaTime * 0.5f);
                 board.AddFlowermanAnger(context.DeltaTime * 0.2f);
+                return BTStatus.Running;
+            }
+
+            return BTStatus.Failure;
+        }
+
+        private static BTStatus HideInShadow(BTContext context, Vector3 enemyPos)
+        {
+            var board = context.Blackboard;
+            var hideTarget = board.FlowermanBlindSpot;
+            if (float.IsPositiveInfinity(hideTarget.x))
+            {
+                if (!float.IsPositiveInfinity(board.LastKnownPlayerPosition.x))
+                {
+                    var escapeDir = board.LastKnownPlayerForward.sqrMagnitude > 0.01f
+                        ? -board.LastKnownPlayerForward
+                        : (enemyPos - board.LastKnownPlayerPosition).normalized;
+                    var offset = Mathf.Clamp(board.DistanceToPlayer * 0.6f, 3f, 8f);
+                    hideTarget = board.LastKnownPlayerPosition + escapeDir * offset;
+                }
+                else
+                {
+                    hideTarget = enemyPos - context.Enemy.transform.forward * 2f;
+                }
+            }
+
+            hideTarget += NavigationHelpers.GetAgentOffset(context.Enemy, 1.35f);
+
+            if (NavigationHelpers.TryMoveAgent(
+                context,
+                hideTarget,
+                3f,
+                30f,
+                "FlowermanHide",
+                3.1f,
+                acceleration: 5.5f,
+                stoppingDistance: 0.4f,
+                allowPartialPath: true))
+            {
+                board.DecayFlowermanStare(context.DeltaTime * 1.4f);
+                board.CoolFlowermanAnger(context.DeltaTime * 0.35f);
+                context.SetActiveAction("FlowermanHide");
                 return BTStatus.Running;
             }
 

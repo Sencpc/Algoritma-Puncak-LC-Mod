@@ -21,6 +21,7 @@ namespace AlgoritmaPuncakMod.AI
         internal float DistanceToPlayer { get; private set; } = float.PositiveInfinity;
         internal bool PlayerVisible { get; private set; }
         internal float PlayerNoiseLevel { get; private set; }
+        internal float PlayerVelocity { get; private set; }
         internal float TimeSincePlayerSeen { get; private set; } = float.PositiveInfinity;
         internal Vector3 TerritoryCenter { get; private set; } = Vector3.zero;
         internal float TerritoryRadius { get; private set; }
@@ -35,7 +36,7 @@ namespace AlgoritmaPuncakMod.AI
             TerritoryRadius = Mathf.Max(0f, radius);
         }
 
-        internal void UpdatePlayerInfo(Vector3 enemyPosition, Vector3 playerPosition, Vector3 playerForward, bool visible, float noiseLevel, float deltaTime)
+        internal void UpdatePlayerInfo(Vector3 enemyPosition, Vector3 playerPosition, Vector3 playerForward, bool visible, float noiseLevel, float playerSpeed, float deltaTime)
         {
             LastKnownPlayerPosition = playerPosition;
             if (playerForward.sqrMagnitude > 0.01f)
@@ -52,6 +53,7 @@ namespace AlgoritmaPuncakMod.AI
             }
             PlayerVisible = visible;
             PlayerNoiseLevel = Mathf.Clamp01(noiseLevel);
+            PlayerVelocity = Mathf.Max(0f, playerSpeed);
             TimeSincePlayerSeen = visible ? 0f : TimeSincePlayerSeen + deltaTime;
         }
 
@@ -59,6 +61,7 @@ namespace AlgoritmaPuncakMod.AI
         {
             PlayerVisible = false;
             DistanceToPlayer = float.PositiveInfinity;
+            PlayerVelocity = 0f;
             TimeSincePlayerSeen += deltaTime;
         }
 

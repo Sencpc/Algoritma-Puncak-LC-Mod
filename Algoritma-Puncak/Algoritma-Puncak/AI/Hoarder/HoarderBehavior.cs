@@ -168,6 +168,17 @@ namespace AlgoritmaPuncakMod.AI
             var board = context.Blackboard;
             board.EnsureHoarderNest(context.Enemy.transform.position);
 
+            if (board.PlayerVisible && !float.IsPositiveInfinity(board.LastKnownPlayerPosition.x))
+            {
+                float playerNestDistance = Vector3.Distance(board.LastKnownPlayerPosition, board.HoarderNest);
+                if (playerNestDistance <= 10f)
+                {
+                    board.TriggerHoarderAggro(1.25f);
+                    global::AlgoritmaPuncakMod.ModLogger.Debug(string.Format("[Hoarder] Holding position; player {0:F1}m from nest", playerNestDistance));
+                    return BTStatus.Failure;
+                }
+            }
+
             if (hoarder.targetItem != null)
             {
                 var targetPos = hoarder.targetItem.transform.position;
@@ -191,6 +202,7 @@ namespace AlgoritmaPuncakMod.AI
                 {
                     hoarder.targetItem = loot;
                     board.MarkHoarderItemLocated();
+                    global::AlgoritmaPuncakMod.ModLogger.Debug(string.Format("[Hoarder] Located loot {0} (value {1})", loot?.itemProperties?.itemName ?? loot?.name ?? "unknown", loot?.scrapValue ?? 0f));
                 }
                 else
                 {
@@ -201,6 +213,7 @@ namespace AlgoritmaPuncakMod.AI
             if (MovementTowards(context, searchTarget, 5.5f, 30f, "HoarderScavenge"))
             {
                 context.SetActiveAction("HoarderScavenge");
+                global::AlgoritmaPuncakMod.ModLogger.Debug(string.Format("[Hoarder] Scanning cell {0}", searchTarget));
                 return BTStatus.Running;
             }
 
@@ -385,7 +398,7 @@ namespace AlgoritmaPuncakMod.AI
         internal static bool TryFindLootNear(Vector3 origin, float radius, out GrabbableObject loot)
         {
             loot = null;
-            float bestDistance = radius;
+            float bestScore = float.MinValue;
             var pool = HoarderBugAI.grabbableObjectsInMap;
             if (pool == null)
             {
@@ -400,23 +413,36 @@ namespace AlgoritmaPuncakMod.AI
                     continue;
                 }
 
-                float distance = Vector3.Distance(origin, go.transform.position);
-                if (distance > bestDistance)
-                {
-                    continue;
-                }
-
                 var grabbable = go.GetComponent<GrabbableObject>();
                 if (grabbable == null || grabbable.isHeld || grabbable.deactivated)
                 {
                     continue;
                 }
 
-                bestDistance = distance;
-                loot = grabbable;
+                float distance = Vector3.Distance(origin, grabbable.transform.position);
+                if (distance > radius)
+                {
+                    continue;
+                }
+
+                float valueBias = Mathf.Clamp(grabbable.scrapValue, 0f, 250f) * 0.25f;
+                float playerBias = grabbable.playerHeldBy != null ? 60f : 0f;
+                float distancePenalty = distance * 2.5f;
+                float score = valueBias + playerBias - distancePenalty;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    loot = grabbable;
+                }
             }
 
-            return loot != null;
+            if (loot != null)
+            {
+                global::AlgoritmaPuncakMod.ModLogger.Debug(string.Format("[Hoarder] Loot candidate {0} (value {1})", loot.itemProperties?.itemName ?? loot.name, loot.scrapValue));
+                return true;
+            }
+
+            return false;
         }
     }
 }

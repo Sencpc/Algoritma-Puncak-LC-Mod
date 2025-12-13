@@ -6,10 +6,15 @@ namespace AlgoritmaPuncakMod.AI
     internal sealed partial class AIBlackboard
     {
         private const float FlowermanAngerThreshold = 12f;
+        private const float FlowermanStareThreshold = 3.25f;
+        private const float FlowermanTurnTrigger = 0.45f;
 
         private float _flowermanAnger;
         private float _flowermanCalmTimer;
         private Vector3 _flowermanCachedForward = Vector3.forward;
+        private float _flowermanStareTimer;
+        private Vector3 _flowermanLastPlayerForward = Vector3.forward;
+        private float _flowermanTurnScore;
 
         private Vector3 _flowermanBlindSpot = Vector3.positiveInfinity;
         private float _flowermanBlindSpotCooldown;
@@ -22,12 +27,27 @@ namespace AlgoritmaPuncakMod.AI
 
         internal bool FlowermanAngerReady => _flowermanAnger >= FlowermanAngerThreshold;
         internal float FlowermanAngerRatio => Mathf.Clamp01(_flowermanAnger / FlowermanAngerThreshold);
+        internal bool FlowermanStareReady => _flowermanStareTimer >= FlowermanStareThreshold;
+        internal float FlowermanStareRatio => Mathf.Clamp01(_flowermanStareTimer / FlowermanStareThreshold);
+        internal bool FlowermanPlayerTurning => _flowermanTurnScore >= FlowermanTurnTrigger;
         internal bool FlowermanHasBlindSpot => !float.IsPositiveInfinity(_flowermanBlindSpot.x);
         internal Vector3 FlowermanBlindSpot => _flowermanBlindSpot;
         internal bool FlowermanHasFlank => !float.IsPositiveInfinity(_flowermanFlankTarget.x);
         internal Vector3 FlowermanFlankTarget => _flowermanFlankTarget;
         internal bool FlowermanHasEscape => !float.IsPositiveInfinity(_flowermanEscapeTarget.x);
         internal Vector3 FlowermanEscapeTarget => _flowermanEscapeTarget;
+
+        internal void AdvanceFlowermanStare(float deltaTime, float distanceToPlayer)
+        {
+            float proximityBoost = Mathf.Clamp01((10f - distanceToPlayer) / 10f);
+            float rate = 1f + proximityBoost * 0.8f;
+            _flowermanStareTimer = Mathf.Min(FlowermanStareThreshold + 2f, _flowermanStareTimer + deltaTime * rate);
+        }
+
+        internal void DecayFlowermanStare(float deltaTime, float intensity = 1f)
+        {
+            _flowermanStareTimer = Mathf.Max(0f, _flowermanStareTimer - deltaTime * Mathf.Max(0.5f, intensity));
+        }
 
         internal void AddFlowermanAnger(float amount)
         {
@@ -169,6 +189,15 @@ namespace AlgoritmaPuncakMod.AI
                 CoolFlowermanAnger(deltaTime * 0.5f);
             }
 
+            if (!PlayerVisible)
+            {
+                DecayFlowermanStare(deltaTime * 1.35f);
+            }
+            else if (_flowermanStareTimer > 0f)
+            {
+                DecayFlowermanStare(deltaTime * 0.25f);
+            }
+
             if (_flowermanCalmTimer > 0f)
             {
                 _flowermanCalmTimer = Mathf.Max(0f, _flowermanCalmTimer - deltaTime);
@@ -191,6 +220,23 @@ namespace AlgoritmaPuncakMod.AI
                 {
                     _flowermanEscapeTarget = Vector3.positiveInfinity;
                 }
+            }
+
+            var currentForward = LastKnownPlayerForward;
+            if (currentForward.sqrMagnitude >= 0.01f)
+            {
+                currentForward = currentForward.normalized;
+                var previousForward = _flowermanLastPlayerForward.sqrMagnitude < 0.01f ? currentForward : _flowermanLastPlayerForward.normalized;
+                float dot = Mathf.Clamp(Vector3.Dot(previousForward, currentForward), -1f, 1f);
+                float delta = Mathf.Acos(dot);
+                float turnVelocity = delta / Mathf.Max(0.0001f, deltaTime);
+                float scaled = Mathf.Clamp01(turnVelocity / 4.5f);
+                _flowermanTurnScore = Mathf.Lerp(_flowermanTurnScore, scaled, 0.4f);
+                _flowermanLastPlayerForward = currentForward;
+            }
+            else
+            {
+                _flowermanTurnScore = Mathf.Lerp(_flowermanTurnScore, 0f, 0.5f * deltaTime + 0.05f);
             }
         }
     }

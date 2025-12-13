@@ -6,6 +6,7 @@ namespace AlgoritmaPuncakMod.AI
     {
         private float _coilheadAggroMemory;
         private Vector3 _coilheadTrackedTarget = Vector3.positiveInfinity;
+        private bool _coilheadAggroLocked;
         private bool _coilheadFrozen;
         private float _coilheadFreezeBuffer;
         private bool _coilheadObservedThisTick;
@@ -13,7 +14,7 @@ namespace AlgoritmaPuncakMod.AI
         private Vector3 _coilheadDoorPosition = Vector3.positiveInfinity;
         private float _coilheadDoorHoldTimer;
 
-        internal bool CoilheadHasAggro => _coilheadAggroMemory > 0f;
+        internal bool CoilheadHasAggro => _coilheadAggroLocked || _coilheadAggroMemory > 0f;
         internal Vector3 CoilheadTarget => _coilheadTrackedTarget;
         internal bool CoilheadFrozen => _coilheadFrozen;
         internal bool CoilheadFreezeActive => _coilheadObservedThisTick || _coilheadFreezeBuffer > 0f;
@@ -21,16 +22,30 @@ namespace AlgoritmaPuncakMod.AI
         internal bool CoilheadDoorReady => _coilheadDoorComponent != null && _coilheadDoorHoldTimer <= 0f;
         internal Component CoilheadDoorComponent => _coilheadDoorComponent;
         internal Vector3 CoilheadDoorFocus => _coilheadDoorPosition;
+        internal bool CoilheadAggroLocked => _coilheadAggroLocked;
 
-        internal void SetCoilheadTarget(Vector3 position, float memoryDuration)
+        internal void SetCoilheadTarget(Vector3 position, float memoryDuration, bool lockAggro = false)
         {
             _coilheadTrackedTarget = position;
             _coilheadAggroMemory = Mathf.Max(_coilheadAggroMemory, memoryDuration);
+            if (lockAggro)
+            {
+                _coilheadAggroLocked = true;
+            }
         }
 
         internal void ClearCoilheadTarget()
         {
             _coilheadTrackedTarget = Vector3.positiveInfinity;
+        }
+
+        internal void ReleaseCoilheadAggroLock()
+        {
+            _coilheadAggroLocked = false;
+            if (_coilheadAggroMemory <= 0f)
+            {
+                _coilheadTrackedTarget = Vector3.positiveInfinity;
+            }
         }
 
         internal void MarkCoilheadObservation()
@@ -66,7 +81,7 @@ namespace AlgoritmaPuncakMod.AI
         partial void TickCoilheadSystems(float deltaTime)
         {
             _coilheadAggroMemory = Mathf.Max(0f, _coilheadAggroMemory - deltaTime);
-            if (_coilheadAggroMemory <= 0f)
+            if (_coilheadAggroMemory <= 0f && !_coilheadAggroLocked)
             {
                 _coilheadTrackedTarget = Vector3.positiveInfinity;
             }
