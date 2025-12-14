@@ -14,12 +14,13 @@ namespace AlgoritmaPuncakMod
     {
         public const string modGUID = "Sen2.AlgoritmaPuncakMod";
         public const string modName = "AlgoritmaPuncak"; 
-        public const string modVersion = "1.1.0";
+        public const string modVersion = "1.1.1";
 
         internal static AlgoritmaPuncakMod Instance { get; private set; }
         internal static ManualLogSource Log { get; private set; }
         internal static AIBalanceProfile BalanceProfile { get; private set; } = new AIBalanceProfile(5f, 12f, 18f, 3f, 12f, 25f, 10f, 1.2f);
         internal static bool DebugInstrumentation { get; private set; }
+        internal static bool SpawnDirectorEnabled { get; private set; } = true;
 
         private Harmony _harmony;
 
@@ -32,6 +33,7 @@ namespace AlgoritmaPuncakMod
         private ConfigEntry<float> _packCohesionRadius;
         private ConfigEntry<float> _reactiveMultiplier;
         private ConfigEntry<bool> _debugInstrumentation;
+        private ConfigEntry<bool> _spawnDirectorEnabled;
 
         private void Awake()
         {
@@ -41,6 +43,7 @@ namespace AlgoritmaPuncakMod
             BindConfig();
             RefreshBalanceProfile();
             ApplyDebugSettings();
+            ApplySpawnDirectorSettings();
 
             _harmony = new Harmony(modGUID);
             _harmony.PatchAll();
@@ -57,6 +60,11 @@ namespace AlgoritmaPuncakMod
 
         private void Update()
         {
+            if (!SpawnDirectorEnabled)
+            {
+                return;
+            }
+
             MoonSpawnDirector.Tick();
         }
 
@@ -71,6 +79,7 @@ namespace AlgoritmaPuncakMod
             _packCohesionRadius = Config.Bind("Pack", "CohesionRadius", 10f, "Radius used to coordinate pack / swarm behaviour.");
             _reactiveMultiplier = Config.Bind("Reactive", "AggressionMultiplier", 1.35f, "Multiplier applied to reactive aggression calculations.");
             _debugInstrumentation = Config.Bind("Debug", "EnableInstrumentation", false, "When true, the mod emits verbose AI instrumentation logs.");
+            _spawnDirectorEnabled = Config.Bind("SpawnDirector", "EnableDirector", true, "If false, the custom spawn director is disabled and vanilla spawn caps are left untouched.");
 
             _stalkMinDistance.SettingChanged += OnConfigValueChanged;
             _stalkMaxDistance.SettingChanged += OnConfigValueChanged;
@@ -81,12 +90,14 @@ namespace AlgoritmaPuncakMod
             _packCohesionRadius.SettingChanged += OnConfigValueChanged;
             _reactiveMultiplier.SettingChanged += OnConfigValueChanged;
             _debugInstrumentation.SettingChanged += OnConfigValueChanged;
+            _spawnDirectorEnabled.SettingChanged += OnConfigValueChanged;
         }
 
         private void OnConfigValueChanged(object sender, EventArgs e)
         {
             RefreshBalanceProfile();
             ApplyDebugSettings();
+            ApplySpawnDirectorSettings();
         }
 
         private void RefreshBalanceProfile()
@@ -107,6 +118,17 @@ namespace AlgoritmaPuncakMod
         private void ApplyDebugSettings()
         {
             DebugInstrumentation = _debugInstrumentation?.Value ?? false;
+        }
+
+        private void ApplySpawnDirectorSettings()
+        {
+            bool previousState = SpawnDirectorEnabled;
+            SpawnDirectorEnabled = _spawnDirectorEnabled?.Value ?? true;
+
+            if (previousState != SpawnDirectorEnabled)
+            {
+                MoonSpawnDirector.Reset("Spawn director toggled via config");
+            }
         }
     }
 

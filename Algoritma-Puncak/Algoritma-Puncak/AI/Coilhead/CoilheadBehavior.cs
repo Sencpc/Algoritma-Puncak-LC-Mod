@@ -241,6 +241,8 @@ namespace AlgoritmaPuncakMod.AI
                     continue;
                 }
 
+                context.Blackboard.RememberCoilheadPlayer(player);
+
                 float distance = Vector3.Distance(coilhead.transform.position, player.transform.position);
                 if (distance < bestDistance)
                 {
@@ -257,8 +259,15 @@ namespace AlgoritmaPuncakMod.AI
                 return true;
             }
 
+            if (context.Blackboard.TryGetCoilheadPersistentTarget(coilhead.transform.position, out var persistentTarget))
+            {
+                context.Blackboard.SetCoilheadTarget(persistentTarget, Mathf.Max(memoryDuration * 0.75f, 3f), lockAggro: true);
+                return true;
+            }
+
             if (!anyPlayerInsideFactory)
             {
+                context.Blackboard.ClearCoilheadSightings();
                 context.Blackboard.ReleaseCoilheadAggroLock();
             }
 

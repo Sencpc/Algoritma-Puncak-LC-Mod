@@ -26,6 +26,23 @@ namespace AlgoritmaPuncakMod.Directors
         private static readonly SpawnCapProfile TrapMoonCaps = new SpawnCapProfile(8, 10, 6, 8);
         private static readonly SpawnCapProfile GeneralUnknownCaps = new SpawnCapProfile(5, 7, 3, 5);
         private static readonly MoonSpawnPolicy GeneralFallbackPolicy = BuildGeneralFallbackPolicy();
+        private static readonly string[] FacilitySizeMemberNames =
+        {
+            "factorySizeMultiplier",
+            "FactorySizeMultiplier",
+            "factorySizeModifier",
+            "FactorySizeModifier",
+            "factorySize",
+            "FactorySize",
+            "facilitySize",
+            "FacilitySize",
+            "dungeonSize",
+            "DungeonSize",
+            "mapSize",
+            "MapSize",
+            "sizeMultiplier",
+            "SizeMultiplier"
+        };
 
         private static object _lastLevel;
         private static MoonSpawnPolicy _activePolicy;
@@ -66,10 +83,10 @@ namespace AlgoritmaPuncakMod.Directors
                     return;
                 }
 
-                if (ApplyPolicy(policy, level, out int insideMatches, out int outsideMatches))
+                if (ApplyPolicy(policy, level, out var appliedIndoorRange, out var appliedOutdoorRange, out int insideMatches, out int outsideMatches))
                 {
                     _applied = true;
-                    LogInfo($"{policy.Name} spawn caps set: inside {policy.IndoorRange.Min}-{policy.IndoorRange.Max}, outside {policy.OutdoorRange.Min}-{policy.OutdoorRange.Max} (weights applied: inside={insideMatches}, outside={outsideMatches}).");
+                    LogInfo($"{policy.Name} spawn caps set: inside {appliedIndoorRange.Min}-{appliedIndoorRange.Max}, outside {appliedOutdoorRange.Min}-{appliedOutdoorRange.Max} (weights applied: inside={insideMatches}, outside={outsideMatches}).");
                 }
             }
             catch (Exception ex)
@@ -104,16 +121,36 @@ namespace AlgoritmaPuncakMod.Directors
             return null;
         }
 
-        private static bool ApplyPolicy(MoonSpawnPolicy policy, object level, out int insideMatches, out int outsideMatches)
+        private static bool ApplyPolicy(
+            MoonSpawnPolicy policy,
+            object level,
+            out SpawnRange resolvedIndoorRange,
+            out SpawnRange resolvedOutdoorRange,
+            out int insideMatches,
+            out int outsideMatches)
         {
+            resolvedIndoorRange = policy?.IndoorRange ?? default;
+            resolvedOutdoorRange = policy?.OutdoorRange ?? default;
             insideMatches = 0;
             outsideMatches = 0;
 
+            if (policy == null)
+            {
+                return false;
+            }
+
+            if (policy?.EnableFacilityScaling == true)
+            {
+                float facilityScale = GetFacilityScale(level);
+                resolvedIndoorRange = ScaleRange(resolvedIndoorRange, facilityScale);
+                resolvedOutdoorRange = ScaleRange(resolvedOutdoorRange, facilityScale);
+            }
+
             bool changed = false;
-            changed |= SetIntRange(level, "enemyAmount", policy.IndoorRange.Min, policy.IndoorRange.Max);
-            changed |= SetIntRange(level, "daytimeEnemyAmount", policy.IndoorRange.Min, policy.IndoorRange.Max);
-            changed |= SetIntRange(level, "outsideEnemyAmount", policy.OutdoorRange.Min, policy.OutdoorRange.Max);
-            changed |= SetIntRange(level, "daytimeOutsideEnemyAmount", policy.OutdoorRange.Min, policy.OutdoorRange.Max);
+            changed |= SetIntRange(level, "enemyAmount", resolvedIndoorRange.Min, resolvedIndoorRange.Max);
+            changed |= SetIntRange(level, "daytimeEnemyAmount", resolvedIndoorRange.Min, resolvedIndoorRange.Max);
+            changed |= SetIntRange(level, "outsideEnemyAmount", resolvedOutdoorRange.Min, resolvedOutdoorRange.Max);
+            changed |= SetIntRange(level, "daytimeOutsideEnemyAmount", resolvedOutdoorRange.Min, resolvedOutdoorRange.Max);
 
             var indoorWeights = policy.IndoorWeights ?? DefaultInsideWeights;
             var outdoorWeights = policy.OutdoorWeights ?? DefaultOutsideWeights;
@@ -345,6 +382,111 @@ namespace AlgoritmaPuncakMod.Directors
             }
 
             return null;
+        }
+
+        private static SpawnRange ScaleRange(SpawnRange original, float scale)
+        {
+            if (scale <= 0f || Mathf.Approximately(scale, 1f))
+            {
+                return original;
+            }
+
+            int scaledMin = Mathf.Clamp(Mathf.RoundToInt(original.Min * scale), 0, 64);
+            int scaledMax = Mathf.Clamp(Mathf.RoundToInt(original.Max * scale), 0, 64);
+
+            if (scaledMin <= 0 && original.Min > 0)
+            {
+                scaledMin = 1;
+            }
+
+            if (scaledMax < scaledMin)
+            {
+                scaledMax = scaledMin;
+            }
+
+            return new SpawnRange(scaledMin, scaledMax);
+        }
+
+        private static float GetFacilityScale(object level)
+        {
+            if (level == null)
+            {
+                return 1f;
+            }
+
+            for (int i = 0; i < FacilitySizeMemberNames.Length; i++)
+            {
+                string member = FacilitySizeMemberNames[i];
+                if (TryReadFloat(level, member, out float value) && value > 0.01f)
+                {
+                    return Mathf.Clamp(value, 0.6f, 2.5f);
+                }
+            }
+
+            return 1f;
+        }
+
+        private static bool TryReadFloat(object target, string memberName, out float value)
+        {
+            value = 0f;
+            if (target == null || string.IsNullOrWhiteSpace(memberName))
+            {
+                return false;
+            }
+
+            var type = target.GetType();
+            var field = AccessTools.Field(type, memberName);
+            if (field != null && TryConvertToFloat(field.GetValue(target), out value))
+            {
+                return true;
+            }
+
+            var property = AccessTools.Property(type, memberName);
+            if (property?.GetGetMethod(true) != null && TryConvertToFloat(property.GetValue(target), out value))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryConvertToFloat(object value, out float result)
+        {
+            switch (value)
+            {
+                case null:
+                    result = 0f;
+                    return false;
+                case float f:
+                    result = f;
+                    return true;
+                case double d:
+                    result = (float)d;
+                    return true;
+                case int i:
+                    result = i;
+                    return true;
+                case long l:
+                    result = l;
+                    return true;
+                case short s:
+                    result = s;
+                    return true;
+                case byte b:
+                    result = b;
+                    return true;
+                default:
+                    try
+                    {
+                        result = Convert.ToSingle(value);
+                        return true;
+                    }
+                    catch
+                    {
+                        result = 0f;
+                        return false;
+                    }
+            }
         }
 
         private static Dictionary<string, int> BuildDefaultInsideMap()
@@ -646,7 +788,8 @@ namespace AlgoritmaPuncakMod.Directors
                 indoorWeights: CloneInsideWeights(),
                 outdoorWeights: CloneOutsideWeights(),
                 indoorScale: 1f,
-                outdoorScale: 1f);
+                outdoorScale: 1f,
+                enableFacilityScaling: true);
         }
 
         private static Dictionary<string, int> CloneInsideWeights(Action<Dictionary<string, int>> mutator = null)
@@ -733,7 +876,8 @@ namespace AlgoritmaPuncakMod.Directors
                 IReadOnlyDictionary<string, int> outdoorWeights,
                 float indoorScale,
                 float outdoorScale,
-                bool disableUnlisted = false)
+                bool disableUnlisted = false,
+                bool enableFacilityScaling = false)
             {
                 Name = name;
                 Difficulty = difficulty;
@@ -745,6 +889,7 @@ namespace AlgoritmaPuncakMod.Directors
                 IndoorWeightScale = indoorScale;
                 OutdoorWeightScale = outdoorScale;
                 DisableUnlistedEntries = disableUnlisted;
+                EnableFacilityScaling = enableFacilityScaling;
             }
 
             internal string Name { get; }
@@ -757,6 +902,7 @@ namespace AlgoritmaPuncakMod.Directors
             internal float IndoorWeightScale { get; }
             internal float OutdoorWeightScale { get; }
             internal bool DisableUnlistedEntries { get; }
+            internal bool EnableFacilityScaling { get; }
 
             internal bool Matches(object level)
             {

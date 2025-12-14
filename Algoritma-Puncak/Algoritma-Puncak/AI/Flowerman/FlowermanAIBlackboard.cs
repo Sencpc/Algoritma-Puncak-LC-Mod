@@ -7,7 +7,7 @@ namespace AlgoritmaPuncakMod.AI
     {
         private const float FlowermanAngerThreshold = 12f;
         private const float FlowermanStareThreshold = 3.25f;
-        private const float FlowermanTurnTrigger = 0.45f;
+        private const float FlowermanTurnTrigger = 0.65f;
 
         private float _flowermanAnger;
         private float _flowermanCalmTimer;
@@ -93,6 +93,17 @@ namespace AlgoritmaPuncakMod.AI
             return Vector3.Dot(view, toEnemy) >= toleranceDot;
         }
 
+        internal bool FlowermanPlayerWatchingSegment(Vector3 from, Vector3 to, float toleranceDot = 0.6f)
+        {
+            if (float.IsPositiveInfinity(LastKnownPlayerPosition.x))
+            {
+                return false;
+            }
+
+            var midpoint = (from + to) * 0.5f;
+            return FlowermanPlayerWatching(midpoint, toleranceDot);
+        }
+
         internal void RefreshFlowermanVectors(Vector3 enemyPosition)
         {
             if (float.IsPositiveInfinity(LastKnownPlayerPosition.x))
@@ -121,8 +132,11 @@ namespace AlgoritmaPuncakMod.AI
 
             if (_flowermanBlindSpotCooldown <= 0f)
             {
-                var blindGuess = LastKnownPlayerPosition - currentForward * Mathf.Max(4.5f, DistanceToPlayer * 0.6f);
-                SampleNavigation(blindGuess, 4.5f, out _flowermanBlindSpot);
+                if (!TryFindFlowermanBlindSpot(currentForward, enemyPosition, out _flowermanBlindSpot))
+                {
+                    _flowermanBlindSpot = Vector3.positiveInfinity;
+                }
+
                 _flowermanBlindSpotCooldown = 0.25f;
             }
 
@@ -154,12 +168,17 @@ namespace AlgoritmaPuncakMod.AI
 
             lateral = lateral.normalized;
             var offset = lateral * (DistanceToPlayer < 6f ? 8f : 5f);
-            if (!SampleNavigation(enemyPosition + offset, 5f, out _flowermanEscapeTarget))
+            if (TryResolveFlowermanEscape(enemyPosition + offset, 5f, out var escapeTarget) ||
+                TryResolveFlowermanEscape(enemyPosition - offset, 5f, out escapeTarget))
             {
-                SampleNavigation(enemyPosition - offset, 5f, out _flowermanEscapeTarget);
+                _flowermanEscapeTarget = escapeTarget;
+                _flowermanEscapeTimer = 2.5f;
             }
-
-            _flowermanEscapeTimer = 2.5f;
+            else
+            {
+                _flowermanEscapeTarget = Vector3.positiveInfinity;
+                _flowermanEscapeTimer = 0f;
+            }
         }
 
         private static bool SampleNavigation(Vector3 guess, float radius, out Vector3 result)
@@ -172,6 +191,74 @@ namespace AlgoritmaPuncakMod.AI
 
             result = Vector3.positiveInfinity;
             return false;
+        }
+
+        private bool TryResolveFlowermanEscape(Vector3 guess, float radius, out Vector3 target)
+        {
+            if (!SampleNavigation(guess, radius, out target))
+            {
+                return false;
+            }
+
+            if (FlowermanPlayerWatching(target, 0.5f))
+            {
+                target = Vector3.positiveInfinity;
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool TryFindFlowermanBlindSpot(Vector3 currentForward, Vector3 enemyPosition, out Vector3 spot)
+        {
+            spot = Vector3.positiveInfinity;
+            var lateral = Vector3.Cross(Vector3.up, currentForward);
+            if (lateral.sqrMagnitude < 0.01f)
+            {
+                lateral = Vector3.Cross(currentForward, Vector3.up);
+            }
+
+            lateral = lateral.sqrMagnitude < 0.01f ? Vector3.right : lateral.normalized;
+
+            float retreatDistance = Mathf.Max(4.5f, DistanceToPlayer * 0.6f);
+            var offsets = new Vector3[]
+            {
+                -currentForward * retreatDistance,
+                -currentForward * retreatDistance + lateral * 3f,
+                -currentForward * retreatDistance - lateral * 3f,
+                -currentForward * (retreatDistance + 2f) + lateral * 1.5f,
+                -currentForward * (retreatDistance + 2f) - lateral * 1.5f
+            };
+
+            for (int i = 0; i < offsets.Length; i++)
+            {
+                var guess = LastKnownPlayerPosition + offsets[i];
+                if (!SampleNavigation(guess, 4.5f, out var candidate))
+                {
+                    continue;
+                }
+
+                if (IsCandidateExposed(candidate))
+                {
+                    continue;
+                }
+
+                spot = candidate;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool IsCandidateExposed(Vector3 candidate)
+        {
+            if (FlowermanPlayerWatching(candidate, 0.45f))
+            {
+                return true;
+            }
+
+            float lookDistance = Vector3.Distance(candidate, LastKnownPlayerPosition);
+            return lookDistance <= 1.25f;
         }
 
         partial void TickFlowermanSystems(float deltaTime)
@@ -230,7 +317,7 @@ namespace AlgoritmaPuncakMod.AI
                 float dot = Mathf.Clamp(Vector3.Dot(previousForward, currentForward), -1f, 1f);
                 float delta = Mathf.Acos(dot);
                 float turnVelocity = delta / Mathf.Max(0.0001f, deltaTime);
-                float scaled = Mathf.Clamp01(turnVelocity / 4.5f);
+                float scaled = Mathf.Clamp01(turnVelocity / 5.5f);
                 _flowermanTurnScore = Mathf.Lerp(_flowermanTurnScore, scaled, 0.4f);
                 _flowermanLastPlayerForward = currentForward;
             }

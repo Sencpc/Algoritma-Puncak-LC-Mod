@@ -21,14 +21,21 @@ namespace AlgoritmaPuncakMod.AI
                 return false;
             }
 
-            if (context.Blackboard.FlowermanAngerReady && context.Blackboard.FlowermanStareReady)
+            var board = context.Blackboard;
+            if (board.FlowermanAngerReady && board.FlowermanStareReady)
             {
                 return true;
             }
 
-            return context.Blackboard.FlowermanPlayerWatching(context.Enemy.transform.position)
-                && context.Blackboard.DistanceToPlayer <= 5f
-                && context.Blackboard.FlowermanStareRatio >= 0.5f;
+            bool playerWatching = board.FlowermanPlayerWatching(context.Enemy.transform.position);
+            if (!playerWatching && board.FlowermanAngerRatio >= 0.35f && board.DistanceToPlayer <= 9f)
+            {
+                return true;
+            }
+
+            return playerWatching
+                && board.DistanceToPlayer <= 5f
+                && board.FlowermanStareRatio >= 0.5f;
         }
 
         internal static bool CanStalk(BTContext context)
@@ -158,11 +165,66 @@ namespace AlgoritmaPuncakMod.AI
             var enemyPos = context.Enemy.transform.position;
             board.RefreshFlowermanVectors(enemyPos);
 
+            bool playerWatching = board.FlowermanPlayerWatching(enemyPos);
             bool playerTurning = board.FlowermanPlayerTurning;
             bool playerStill = board.PlayerVelocity <= 0.35f;
-            bool farFromPlayer = board.DistanceToPlayer > 4.75f;
+            float playerDistance = board.DistanceToPlayer;
+            bool farFromPlayer = playerDistance > 4.75f;
+            bool playerTooClose = playerDistance <= 2.6f;
+            bool allowShadowHide = farFromPlayer && playerStill && !playerWatching;
+            bool playerAdvancingBehindCover = !playerWatching && !board.PlayerVisible && board.PlayerVelocity > 0.35f && playerDistance <= 6.5f;
 
-            if (farFromPlayer && (playerTurning || playerStill))
+            if (playerTooClose && !playerWatching && board.FlowermanHasBlindSpot)
+            {
+                var dodgeTarget = board.FlowermanBlindSpot;
+                if (!float.IsPositiveInfinity(dodgeTarget.x))
+                {
+                    float dodgeSpeed = playerWatching ? 3.4f : 4.6f;
+                    if (NavigationHelpers.TryMoveAgent(
+                        context,
+                        dodgeTarget,
+                        3f,
+                        28f,
+                        "FlowermanCornerDodge",
+                        dodgeSpeed,
+                        acceleration: playerWatching ? 6.5f : 8.5f,
+                        stoppingDistance: 0.35f,
+                        allowPartialPath: true))
+                    {
+                        board.DecayFlowermanStare(context.DeltaTime * 0.9f);
+                        board.AddFlowermanAnger(context.DeltaTime * 0.35f);
+                        context.SetActiveAction("FlowermanCornerDodge");
+                        return BTStatus.Running;
+                    }
+                }
+            }
+
+            if (playerAdvancingBehindCover && board.FlowermanHasFlank)
+            {
+                var flankTarget = board.FlowermanFlankTarget;
+                if (!float.IsPositiveInfinity(flankTarget.x) && !board.FlowermanPlayerWatching(flankTarget))
+                {
+                    float orbitSpeed = 4.85f;
+                    if (NavigationHelpers.TryMoveAgent(
+                        context,
+                        flankTarget,
+                        3.5f,
+                        42f,
+                        "FlowermanOrbitCover",
+                        orbitSpeed,
+                        acceleration: 8.5f,
+                        stoppingDistance: 0.4f,
+                        allowPartialPath: true))
+                    {
+                        board.DecayFlowermanStare(context.DeltaTime * 0.7f);
+                        board.AddFlowermanAnger(context.DeltaTime * 0.45f);
+                        context.SetActiveAction("FlowermanOrbitCover");
+                        return BTStatus.Running;
+                    }
+                }
+            }
+
+            if (allowShadowHide)
             {
                 var hideStatus = HideInShadow(context, enemyPos);
                 if (hideStatus != BTStatus.Failure)
@@ -170,14 +232,28 @@ namespace AlgoritmaPuncakMod.AI
                     return hideStatus;
                 }
             }
+            else if (playerTurning && !playerWatching)
+            {
+                board.AddFlowermanAnger(context.DeltaTime * 0.35f);
+            }
 
             var blindSpot = board.FlowermanBlindSpot;
             if (!float.IsPositiveInfinity(blindSpot.x))
             {
+                if (playerWatching && board.FlowermanPlayerWatchingSegment(enemyPos, blindSpot, 0.55f))
+                {
+                    goto SkipBlindSpot;
+                }
+
                 float blindDistance = Vector3.Distance(enemyPos, blindSpot);
                 if (blindDistance > 1.25f)
                 {
                     float sneakSpeed = Mathf.Lerp(1.6f, 3f, Mathf.Clamp01(blindDistance / 6f));
+                    if (!playerWatching)
+                    {
+                        sneakSpeed += 0.8f;
+                    }
+                    float sneakAcceleration = playerWatching ? 4.5f : 6.5f;
                     if (NavigationHelpers.TryMoveAgent(
                         context,
                         blindSpot,
@@ -185,15 +261,21 @@ namespace AlgoritmaPuncakMod.AI
                         30f,
                         "FlowermanSneak",
                         sneakSpeed,
-                        acceleration: 4.5f,
+                        acceleration: sneakAcceleration,
                         stoppingDistance: 0.35f,
                         allowPartialPath: true))
                     {
                         context.SetActiveAction("FlowermanSneak");
+                        if (!playerWatching)
+                        {
+                            board.AddFlowermanAnger(context.DeltaTime * 0.25f);
+                        }
                         return BTStatus.Running;
                     }
                 }
             }
+
+        SkipBlindSpot:
 
             var flank = board.FlowermanFlankTarget;
             if (float.IsPositiveInfinity(flank.x))
@@ -201,11 +283,18 @@ namespace AlgoritmaPuncakMod.AI
                 return BTStatus.Failure;
             }
 
-            float speed = 3.75f;
+            if (playerWatching && board.FlowermanPlayerWatchingSegment(enemyPos, flank, 0.5f))
+            {
+                return BTStatus.Failure;
+            }
+
+            float speed = playerWatching ? 3.75f : 4.9f;
             if (board.DistanceToPlayer > 12f)
             {
-                speed = 4.5f;
+                speed += playerWatching ? 0.75f : 1.3f;
             }
+            float acceleration = playerWatching ? 7f : 9.5f;
+            float stoppingDistance = playerWatching ? 0.6f : 0.45f;
 
             if (NavigationHelpers.TryMoveAgent(
                 context,
@@ -214,12 +303,14 @@ namespace AlgoritmaPuncakMod.AI
                 60f,
                 "FlowermanStalk",
                 speed,
-                acceleration: 7f,
-                stoppingDistance: 0.6f,
+                acceleration: acceleration,
+                stoppingDistance: stoppingDistance,
                 allowPartialPath: true))
             {
-                board.DecayFlowermanStare(context.DeltaTime * 0.5f);
-                board.AddFlowermanAnger(context.DeltaTime * 0.2f);
+                float stareFalloff = playerWatching ? 0.5f : 0.8f;
+                board.DecayFlowermanStare(context.DeltaTime * stareFalloff);
+                float angerGain = playerWatching ? 0.2f : 0.4f;
+                board.AddFlowermanAnger(context.DeltaTime * angerGain);
                 return BTStatus.Running;
             }
 
