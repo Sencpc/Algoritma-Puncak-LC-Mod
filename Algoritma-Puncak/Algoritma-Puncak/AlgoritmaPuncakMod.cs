@@ -14,7 +14,7 @@ namespace AlgoritmaPuncakMod
     {
         public const string modGUID = "Sen2.AlgoritmaPuncakMod";
         public const string modName = "AlgoritmaPuncak"; 
-        public const string modVersion = "1.1.1";
+        public const string modVersion = "1.1.2";
 
         internal static AlgoritmaPuncakMod Instance { get; private set; }
         internal static ManualLogSource Log { get; private set; }

@@ -84,6 +84,12 @@ namespace AlgoritmaPuncakMod.AI
 
             if (!CoilheadDoorHelper.TryBuildChasePath(agent, target, out var path))
             {
+                if (CoilheadDoorHelper.TryFindBlockingDoor(agent.transform.position, target, out var blockingDoor) && blockingDoor.HasDoor)
+                {
+                    board.BeginCoilheadDoorPause(blockingDoor.Door, blockingDoor.Position, 0.5f);
+                    return HandleDoorPause(context, agent, board);
+                }
+
                 return BTStatus.Failure;
             }
 
@@ -224,6 +230,9 @@ namespace AlgoritmaPuncakMod.AI
             float bestDistance = float.MaxValue;
             Vector3 bestPosition = Vector3.positiveInfinity;
             PlayerControllerB closestPlayer = null;
+            float fallbackDistance = float.MaxValue;
+            Vector3 fallbackPosition = Vector3.positiveInfinity;
+            PlayerControllerB fallbackPlayer = null;
             bool anyPlayerInsideFactory = false;
             for (int i = 0; i < scripts.Length; i++)
             {
@@ -236,17 +245,28 @@ namespace AlgoritmaPuncakMod.AI
                 bool aliveInsideFactory = !player.isPlayerDead && player.isInsideFactory;
                 anyPlayerInsideFactory |= aliveInsideFactory;
 
+                if (aliveInsideFactory)
+                {
+                    context.Blackboard.RememberCoilheadPlayer(player);
+
+                    float distance = Vector3.Distance(coilhead.transform.position, player.transform.position);
+                    if (distance < fallbackDistance)
+                    {
+                        fallbackDistance = distance;
+                        fallbackPosition = player.transform.position;
+                        fallbackPlayer = player;
+                    }
+                }
+
                 if (!coilhead.PlayerIsTargetable(player, false, false))
                 {
                     continue;
                 }
 
-                context.Blackboard.RememberCoilheadPlayer(player);
-
-                float distance = Vector3.Distance(coilhead.transform.position, player.transform.position);
-                if (distance < bestDistance)
+                float targetDistance = Vector3.Distance(coilhead.transform.position, player.transform.position);
+                if (targetDistance < bestDistance)
                 {
-                    bestDistance = distance;
+                    bestDistance = targetDistance;
                     bestPosition = player.transform.position;
                     closestPlayer = player;
                 }
@@ -256,6 +276,13 @@ namespace AlgoritmaPuncakMod.AI
             {
                 bool lockAggro = closestPlayer != null && !closestPlayer.isPlayerDead && closestPlayer.isInsideFactory;
                 context.Blackboard.SetCoilheadTarget(bestPosition, memoryDuration, lockAggro);
+                return true;
+            }
+
+            if (!float.IsPositiveInfinity(fallbackPosition.x))
+            {
+                bool lockAggro = fallbackPlayer != null && !fallbackPlayer.isPlayerDead && fallbackPlayer.isInsideFactory;
+                context.Blackboard.SetCoilheadTarget(fallbackPosition, Mathf.Max(memoryDuration * 0.5f, 3f), lockAggro);
                 return true;
             }
 
@@ -393,6 +420,61 @@ namespace AlgoritmaPuncakMod.AI
             }
 
             return DoorInfo.None;
+        }
+
+        internal static bool TryFindBlockingDoor(Vector3 origin, Vector3 target, out DoorInfo doorInfo)
+        {
+            RefreshLinks();
+            doorInfo = DoorInfo.None;
+
+            var segment = target - origin;
+            if (segment.sqrMagnitude < 0.25f)
+            {
+                return false;
+            }
+
+            float segmentLength = segment.magnitude;
+            float proximity = Mathf.Clamp(segmentLength * 0.15f, 0.6f, 1.25f);
+
+            for (int i = 0; i < _cachedLinks.Length; i++)
+            {
+                var link = _cachedLinks[i];
+                if (link == null || !link.enabled)
+                {
+                    continue;
+                }
+
+                var door = ResolveDoorComponent(link.gameObject);
+                if (door == null)
+                {
+                    continue;
+                }
+
+                var position = link.transform.position;
+                var closest = ClosestPointOnSegment(origin, target, position);
+                float distance = Vector3.Distance(position, closest);
+                if (distance > proximity)
+                {
+                    continue;
+                }
+
+                var toDoor = position - origin;
+                if (Vector3.Dot(toDoor, segment) <= 0f)
+                {
+                    continue;
+                }
+
+                if (toDoor.magnitude > segmentLength + 1.5f)
+                {
+                    continue;
+                }
+
+                bool isOpen = GetDoorOpenState(door) ?? true;
+                doorInfo = new DoorInfo(door, position, isOpen);
+                return true;
+            }
+
+            return false;
         }
 
         internal static void ForceDoorOpen(Component door)

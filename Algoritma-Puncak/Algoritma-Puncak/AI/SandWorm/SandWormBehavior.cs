@@ -237,17 +237,20 @@ namespace AlgoritmaPuncakMod.AI
 
             ReusableKeys.Clear();
             float decay = DecayPerSecond * deltaTime;
-            foreach (var pair in Cells)
+            // Enumerate over a stable snapshot of keys to avoid modifying during iteration
+            var keysSnapshot = new List<Vector2Int>(Cells.Keys);
+            for (int i = 0; i < keysSnapshot.Count; i++)
             {
-                var data = pair.Value;
+                var key = keysSnapshot[i];
+                var data = Cells[key];
                 data.Heat = Mathf.Max(0f, data.Heat - decay);
                 if (data.Heat <= 0.01f)
                 {
-                    ReusableKeys.Add(pair.Key);
+                    ReusableKeys.Add(key);
                 }
                 else
                 {
-                    Cells[pair.Key] = data;
+                    Cells[key] = data;
                 }
             }
 
@@ -267,13 +270,16 @@ namespace AlgoritmaPuncakMod.AI
             }
 
             float radiusSqr = radius * radius;
-            foreach (var pair in Cells)
+            // Enumerate over a snapshot of keys to avoid dictionary mutation during iteration
+            var keysSnapshot = new List<Vector2Int>(Cells.Keys);
+            for (int i = 0; i < keysSnapshot.Count; i++)
             {
-                var data = pair.Value;
+                var key = keysSnapshot[i];
+                var data = Cells[key];
                 if ((data.Center - center).sqrMagnitude <= radiusSqr)
                 {
                     data.Heat *= 0.2f;
-                    Cells[pair.Key] = data;
+                    Cells[key] = data;
                 }
             }
         }
