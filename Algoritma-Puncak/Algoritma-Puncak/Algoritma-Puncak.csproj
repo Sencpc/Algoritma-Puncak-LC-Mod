@@ -64,6 +64,10 @@
     <Reference Include="UnityEngine.AIModule">
       <HintPath>D:\SteamLibrary\steamapps\common\Lethal Company\Lethal Company_Data\Managed\UnityEngine.AIModule.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.AnimationModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>D:\SteamLibrary\steamapps\common\Lethal Company\Lethal Company_Data\Managed\UnityEngine.AnimationModule.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>D:\SteamLibrary\steamapps\common\Lethal Company\Lethal Company_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
@@ -87,21 +91,28 @@
     <Compile Include="AI\BehaviorTree.cs" />
     <Compile Include="AI\Blob\BlobAIBlackboard.cs" />
     <Compile Include="AI\Blob\BlobBehavior.cs" />
+    <Compile Include="AI\Blob\BlobPatches.cs" />
     <Compile Include="AI\Baboon\BaboonAIBlackboard.cs" />
     <Compile Include="AI\Baboon\BaboonBehavior.cs" />
+    <Compile Include="AI\Baboon\BaboonPatches.cs" />
     <Compile Include="AI\Hoarder\HoarderAIBlackboard.cs" />
     <Compile Include="AI\Hoarder\HoarderBehavior.cs" />
     <Compile Include="AI\Coilhead\CoilheadAIBlackboard.cs" />
     <Compile Include="AI\Coilhead\CoilheadBehavior.cs" />
+    <Compile Include="AI\Coilhead\CoilheadPatches.cs" />
     <Compile Include="AI\Flowerman\FlowermanAIBlackboard.cs" />
     <Compile Include="AI\Flowerman\FlowermanBehavior.cs" />
+    <Compile Include="AI\Flowerman\FlowermanPatches.cs" />
     <Compile Include="AI\Masked\MaskedAIBlackboard.cs" />
     <Compile Include="AI\Masked\MaskedBehavior.cs" />
     <Compile Include="AI\Masked\MaskedMimicryPlanner.cs" />
+    <Compile Include="AI\Masked\MaskedPatches.cs" />
     <Compile Include="AI\MouthDog\MouthDogAIBlackboard.cs" />
     <Compile Include="AI\MouthDog\MouthDogBehavior.cs" />
+    <Compile Include="AI\MouthDog\MouthDogPatches.cs" />
     <Compile Include="AI\SandWorm\SandWormAIBlackboard.cs" />
     <Compile Include="AI\SandWorm\SandWormBehavior.cs" />
+    <Compile Include="AI\SandWorm\SandWormPatches.cs" />
     <Compile Include="AI\SnareFlea\SnareFleaAIBlackboard.cs" />
     <Compile Include="AI\SnareFlea\SnareFleaBehavior.cs" />
     <Compile Include="AI\SporeLizard\SporeLizardAIBlackboard.cs" />
@@ -109,8 +120,10 @@
     <Compile Include="Directors\MoonSpawnDirector.cs" />
     <Compile Include="AI\SandSpider\SandSpiderAIBlackboard.cs" />
     <Compile Include="AI\SandSpider\SandSpiderBehavior.cs" />
+    <Compile Include="AI\SandSpider\SandSpiderPatches.cs" />
     <Compile Include="AI\Thumper\ThumperAIBlackboard.cs" />
     <Compile Include="AI\Thumper\ThumperBehavior.cs" />
+    <Compile Include="AI\Thumper\ThumperPatches.cs" />
     <Compile Include="Diagnostics\ModLogger.cs" />
     <Compile Include="AlgoritmaPuncakMod.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

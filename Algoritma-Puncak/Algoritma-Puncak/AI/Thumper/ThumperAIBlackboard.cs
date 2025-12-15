@@ -24,6 +24,7 @@ namespace AlgoritmaPuncakMod.AI
         private float _thumperPatrolRecalcTimer;
         private Vector3 _thumperSprintTarget = Vector3.positiveInfinity;
         private float _thumperSprintTimer;
+        private float _thumperStuckTimer;
 
         internal bool ThumperCanPrime => _thumperChargeState == ThumperChargeState.Idle && _thumperChargeCooldown <= 0f;
         internal bool ThumperPrimingActive => _thumperChargeState == ThumperChargeState.Priming;
@@ -37,6 +38,9 @@ namespace AlgoritmaPuncakMod.AI
         internal bool ShouldRefreshThumperPatrol => _thumperPatrolRecalcTimer <= 0f;
         internal bool HasThumperSprintTarget => !float.IsPositiveInfinity(_thumperSprintTarget.x);
         internal Vector3 ThumperSprintTarget => _thumperSprintTarget;
+        internal float ThumperStuckTimer => _thumperStuckTimer;
+        internal void ResetThumperStuck() { _thumperStuckTimer = 0f; }
+        internal void AccumulateThumperStuck(float dt) { _thumperStuckTimer = Mathf.Min(_thumperStuckTimer + dt, 2f); }
 
         internal bool ThumperReadyToBurst => _thumperChargeState == ThumperChargeState.Priming && _thumperWindupTimer <= 0f;
 

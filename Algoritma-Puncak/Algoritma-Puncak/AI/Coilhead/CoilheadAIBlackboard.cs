@@ -60,6 +60,13 @@ namespace AlgoritmaPuncakMod.AI
             }
         }
 
+        internal void ClearCoilheadAggro()
+        {
+            _coilheadAggroLocked = false;
+            _coilheadAggroMemory = 0f;
+            _coilheadTrackedTarget = Vector3.positiveInfinity;
+        }
+
         internal void MarkCoilheadObservation()
         {
             _coilheadObservedThisTick = true;

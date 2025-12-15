@@ -16,13 +16,24 @@ namespace AlgoritmaPuncakMod.AI
                 return false;
             }
 
+            // Allow door interaction even when observed if very close to the door
+            var board = context.Blackboard;
+            if (board.CoilheadDoorEngaged && !float.IsPositiveInfinity(board.CoilheadDoorFocus.x))
+            {
+                float toDoor = Vector3.Distance(context.Enemy.transform.position, board.CoilheadDoorFocus);
+                if (toDoor <= 1.5f)
+                {
+                    return false;
+                }
+            }
+
             bool observed = CoilheadWorld.IsObserved(context.Coilhead);
             if (observed)
             {
-                context.Blackboard.MarkCoilheadObservation();
+                board.MarkCoilheadObservation();
             }
 
-            return observed || context.Blackboard.CoilheadFreezeActive;
+            return observed || board.CoilheadFreezeActive;
         }
 
         internal static bool HasTarget(BTContext context)
@@ -79,6 +90,7 @@ namespace AlgoritmaPuncakMod.AI
 
             if (board.CoilheadDoorEngaged)
             {
+                // If already breaching a door, keep trying without long cooldowns
                 return HandleDoorPause(context, agent, board);
             }
 
@@ -96,7 +108,8 @@ namespace AlgoritmaPuncakMod.AI
             var doorInfo = CoilheadDoorHelper.InspectPath(path);
             if (doorInfo.HasDoor && !doorInfo.IsOpen)
             {
-                board.BeginCoilheadDoorPause(doorInfo.Door, doorInfo.Position, 0.5f);
+                // Reduce hold time to allow multiple rapid opens in succession
+                board.BeginCoilheadDoorPause(doorInfo.Door, doorInfo.Position, 0.15f);
                 return HandleDoorPause(context, agent, board);
             }
 
@@ -157,6 +170,7 @@ namespace AlgoritmaPuncakMod.AI
                 }
             }
 
+            // Continuously attempt to open the door while focused
             CoilheadDoorHelper.ForceDoorOpen(board.CoilheadDoorComponent);
             context.SetActiveAction("CoilheadDoorBreach");
 
@@ -295,10 +309,13 @@ namespace AlgoritmaPuncakMod.AI
             if (!anyPlayerInsideFactory)
             {
                 context.Blackboard.ClearCoilheadSightings();
-                context.Blackboard.ReleaseCoilheadAggroLock();
+                context.Blackboard.ClearCoilheadAggro();
+                return false;
             }
 
-            return context.Blackboard.CoilheadHasAggro && !float.IsPositiveInfinity(context.Blackboard.CoilheadTarget.x);
+            // No valid target found; drop aggro immediately so Phase 2 ends even for single-player cases
+            context.Blackboard.ClearCoilheadAggro();
+            return false;
         }
 
         internal static bool IsObserved(SpringManAI coilhead)

@@ -1,5 +1,6 @@
 ﻿using System;
 using AlgoritmaPuncakMod.AI;
+using System.Collections.Generic;
 using AlgoritmaPuncakMod.Directors;
 using BepInEx;
 using BepInEx.Configuration;
@@ -14,7 +15,7 @@ namespace AlgoritmaPuncakMod
     {
         public const string modGUID = "Sen2.AlgoritmaPuncakMod";
         public const string modName = "AlgoritmaPuncak"; 
-        public const string modVersion = "1.1.2";
+        public const string modVersion = "1.1.3";
 
         internal static AlgoritmaPuncakMod Instance { get; private set; }
         internal static ManualLogSource Log { get; private set; }
@@ -34,6 +35,8 @@ namespace AlgoritmaPuncakMod
         private ConfigEntry<float> _reactiveMultiplier;
         private ConfigEntry<bool> _debugInstrumentation;
         private ConfigEntry<bool> _spawnDirectorEnabled;
+        private ConfigEntry<bool> _dogIgnoreOtherEnemies;
+        private ConfigEntry<string> _dogIgnoredTypeNames;
 
         private void Awake()
         {
@@ -81,6 +84,9 @@ namespace AlgoritmaPuncakMod
             _debugInstrumentation = Config.Bind("Debug", "EnableInstrumentation", false, "When true, the mod emits verbose AI instrumentation logs.");
             _spawnDirectorEnabled = Config.Bind("SpawnDirector", "EnableDirector", true, "If false, the custom spawn director is disabled and vanilla spawn caps are left untouched.");
 
+            _dogIgnoreOtherEnemies = Config.Bind("DogBehavior", "IgnoreOtherEnemies", false, "If true, Eyeless Dogs will not attack other enemies on collision.");
+            _dogIgnoredTypeNames = Config.Bind("DogBehavior", "IgnoredTypesCsv", "BaboonBirdAI,MaskedPlayerEnemy,BlobAI", "Comma-separated enemy type names that MouthDog ignores when colliding.");
+
             _stalkMinDistance.SettingChanged += OnConfigValueChanged;
             _stalkMaxDistance.SettingChanged += OnConfigValueChanged;
             _huntAggroDistance.SettingChanged += OnConfigValueChanged;
@@ -91,6 +97,8 @@ namespace AlgoritmaPuncakMod
             _reactiveMultiplier.SettingChanged += OnConfigValueChanged;
             _debugInstrumentation.SettingChanged += OnConfigValueChanged;
             _spawnDirectorEnabled.SettingChanged += OnConfigValueChanged;
+            _dogIgnoreOtherEnemies.SettingChanged += OnConfigValueChanged;
+            _dogIgnoredTypeNames.SettingChanged += OnConfigValueChanged;
         }
 
         private void OnConfigValueChanged(object sender, EventArgs e)
@@ -113,6 +121,10 @@ namespace AlgoritmaPuncakMod
                 _reactiveMultiplier.Value);
 
             AIBehaviorCoordinator.Initialize(BalanceProfile.TerritoryRadius);
+
+            // Refresh shared toggles for patches/managers
+            DogIgnoreOtherEnemies = _dogIgnoreOtherEnemies.Value;
+            DogIgnoredTypeNames = ParseTypeNames(_dogIgnoredTypeNames.Value);
         }
 
         private void ApplyDebugSettings()
@@ -130,6 +142,23 @@ namespace AlgoritmaPuncakMod
                 MoonSpawnDirector.Reset("Spawn director toggled via config");
             }
         }
+
+        private static HashSet<string> ParseTypeNames(string csv)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(csv))
+            {
+                var parts = csv.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    set.Add(parts[i].Trim());
+                }
+            }
+            return set;
+        }
+
+        internal static bool DogIgnoreOtherEnemies { get; private set; }
+        internal static HashSet<string> DogIgnoredTypeNames { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 
     [HarmonyPatch(typeof(EnemyAI))]

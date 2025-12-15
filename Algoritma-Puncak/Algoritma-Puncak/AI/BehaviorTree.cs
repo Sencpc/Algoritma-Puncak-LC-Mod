@@ -240,6 +240,14 @@ namespace AlgoritmaPuncakMod.AI
             {
                 agent.stoppingDistance = stoppingDistance;
             }
+
+            // Improve responsiveness and recovery for wider agents
+            try
+            {
+                agent.angularSpeed = Mathf.Max(agent.angularSpeed, 720f);
+                agent.autoRepath = true;
+            }
+            catch { }
         }
 
         private static bool TryBuildPath(
@@ -251,7 +259,9 @@ namespace AlgoritmaPuncakMod.AI
             out NavMeshPath selectedPath)
         {
             selectedPath = null;
-            float clampedRadius = Mathf.Max(0.35f, sampleRadius);
+            float minRadius = 0.35f;
+            try { minRadius = Mathf.Max(minRadius, agent.radius * 1.1f); } catch { }
+            float clampedRadius = Mathf.Max(minRadius, sampleRadius);
 
             for (int i = 0; i < SampleMultipliers.Length; i++)
             {

@@ -21,7 +21,9 @@ namespace AlgoritmaPuncakMod.AI
 
             var trackedPlayers = GatherPlayers();
             UpdatePlayerSnapshots(enemy, trackedPlayers, deltaTime);
-            var snapshot = SelectTarget(enemy.transform.position, profile.HuntAggroDistance * 1.5f);
+            
+            // Dynamic retargeting: check if there's a closer player within retarget radius
+            var snapshot = SelectTargetWithRetargeting(enemy, blackboard, profile.HuntAggroDistance * 1.5f);
 
             int enemyId = enemy.GetInstanceID();
             if (snapshot != null)
@@ -105,6 +107,56 @@ namespace AlgoritmaPuncakMod.AI
             }
         }
 
+        private PlayerSnapshot SelectTargetWithRetargeting(EnemyAI enemy, AIBlackboard blackboard, float maxDistance)
+        {
+            const float RetargetRadiusMultiplier = 0.6f; // Switch if new target is 60% closer
+
+            Vector3 enemyPos = enemy.transform.position;
+            Vector3 currentTarget = blackboard.LastKnownPlayerPosition;
+            
+            PlayerSnapshot closest = null;
+            float bestDistance = maxDistance;
+
+            // Find absolute closest player
+            foreach (var snapshot in _playerSnapshots.Values)
+            {
+                float distance = Vector3.Distance(enemyPos, snapshot.Position);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    closest = snapshot;
+                }
+            }
+
+            // If we have a current target and a potential new target, check if retargeting makes sense
+            if (closest != null && !float.IsPositiveInfinity(currentTarget.x))
+            {
+                float currentTargetDistance = Vector3.Distance(enemyPos, currentTarget);
+                float newTargetDistance = bestDistance;
+
+                // Only retarget if new player is significantly closer (60% or less of current distance)
+                // This prevents constant flip-flopping between targets
+                if (newTargetDistance > currentTargetDistance * RetargetRadiusMultiplier)
+                {
+                    // New target isn't significantly closer, keep tracking current if still in range
+                    foreach (var snapshot in _playerSnapshots.Values)
+                    {
+                        float distToCurrent = Vector3.Distance(snapshot.Position, currentTarget);
+                        if (distToCurrent < 3f) // Same target (within 3m tolerance)
+                        {
+                            float distToEnemy = Vector3.Distance(enemyPos, snapshot.Position);
+                            if (distToEnemy < maxDistance)
+                            {
+                                return snapshot; // Stick with current target
+                            }
+                        }
+                    }
+                }
+            }
+
+            return closest;
+        }
+
         private PlayerSnapshot SelectTarget(Vector3 enemyPosition, float maxDistance)
         {
             PlayerSnapshot closest = null;
@@ -113,6 +165,24 @@ namespace AlgoritmaPuncakMod.AI
             foreach (var snapshot in _playerSnapshots.Values)
             {
                 float distance = Vector3.Distance(enemyPosition, snapshot.Position);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    closest = snapshot;
+                }
+            }
+
+            return closest;
+        }
+
+        internal PlayerSnapshot GetClosestPlayerInRange(Vector3 position, float maxRange)
+        {
+            PlayerSnapshot closest = null;
+            float bestDistance = maxRange;
+
+            foreach (var snapshot in _playerSnapshots.Values)
+            {
+                float distance = Vector3.Distance(position, snapshot.Position);
                 if (distance < bestDistance)
                 {
                     bestDistance = distance;
@@ -189,14 +259,29 @@ namespace AlgoritmaPuncakMod.AI
                 float adjustedHigh = highStrength * voiceFalloff;
                 float adjustedLow = lowStrength * movementFalloff;
 
-                if (adjustedHigh > 0.05f)
+                if (adjustedHigh > 0.02f)
                 {
                     blackboard.RegisterMouthDogNoise(position, adjustedHigh, highPriority: true);
                 }
 
-                if (adjustedLow > 0.05f)
+                if (adjustedLow > 0.02f)
                 {
                     blackboard.RegisterMouthDogNoise(position, adjustedLow, highPriority: false);
+                }
+            }
+
+            // Heatmap fallback: if no current stimuli, sample hottest outside noise cell (shared with SandWorm)
+            if (isMouthDog && !blackboard.MouthDogHasHighStimulus && !blackboard.MouthDogHasLowStimulus)
+            {
+                if (SandWormNoiseField.TryGetHottestCell(out var hotspot, out float heat))
+                {
+                    float normalized = SandWormNoiseField.NormalizeHeat(heat);
+                    if (normalized > 0.03f)
+                    {
+                        float low = Mathf.Lerp(0.15f, 0.7f, normalized);
+                        bool high = normalized >= 0.55f;
+                        blackboard.RegisterMouthDogNoise(hotspot, high ? Mathf.Max(low, 0.8f) : low, highPriority: high);
+                    }
                 }
             }
         }
@@ -303,7 +388,7 @@ namespace AlgoritmaPuncakMod.AI
             }
         }
 
-        private sealed class PlayerSnapshot
+        internal sealed class PlayerSnapshot
         {
             private const float FootstepStride = 1.05f;
             private Vector3 _previousPosition;

@@ -127,6 +127,28 @@ namespace AlgoritmaPuncakMod.AI
                 return BTStatus.Failure;
             }
 
+            // Detect door-edge or navmesh snag: accumulating stuck time if nearly stationary while still far
+            if (agent.velocity.sqrMagnitude < 0.25f && agent.remainingDistance > 0.9f)
+            {
+                board.AccumulateThumperStuck(context.DeltaTime);
+                // Nudge sideways slightly to escape edge cases
+                var root = agent.transform;
+                var perp = Vector3.Cross(board.ThumperChargeDirection, Vector3.up).normalized;
+                root.position += perp * 0.05f;
+            }
+            else
+            {
+                board.ResetThumperStuck();
+            }
+
+            if (board.ThumperStuckTimer >= 0.8f)
+            {
+                // Bail out of charge gracefully when stuck, then recover briefly
+                board.StopThumperCharge(stunned: false);
+                context.SetActiveAction("ThumperRecover");
+                return BTStatus.Running;
+            }
+
             if (DetectImpact(context))
             {
                 board.StopThumperCharge(stunned: true);

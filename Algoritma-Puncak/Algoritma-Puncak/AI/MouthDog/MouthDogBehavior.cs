@@ -38,6 +38,7 @@ namespace AlgoritmaPuncakMod.AI
             if (distance <= 0.75f)
             {
                 context.Blackboard.ClearMouthDogHighStimulus();
+                TrySetAnimatorBool(context.Enemy, "StartedChase", false);
                 return BTStatus.Success;
             }
 
@@ -57,6 +58,8 @@ namespace AlgoritmaPuncakMod.AI
                 allowPartialPath: true))
             {
                 context.Blackboard.BeginMouthDogChargeCooldown(Mathf.Lerp(0.35f, 0.85f, intensity));
+                TrySetAnimatorBool(context.Enemy, "StartedChase", true);
+                TrySetAnimatorFloat(context.Enemy, "speedMultiplier", context.Agent.velocity.magnitude);
                 return BTStatus.Running;
             }
 
@@ -84,6 +87,7 @@ namespace AlgoritmaPuncakMod.AI
             if (distance <= 0.9f)
             {
                 context.Blackboard.ClearMouthDogLowStimulus();
+                TrySetAnimatorBool(context.Enemy, "StartedChase", false);
                 return BTStatus.Success;
             }
 
@@ -99,6 +103,9 @@ namespace AlgoritmaPuncakMod.AI
                 stoppingDistance: 0.35f,
                 allowPartialPath: true))
             {
+                // Use a moderate speed animation while investigating
+                TrySetAnimatorBool(context.Enemy, "StartedChase", true);
+                TrySetAnimatorFloat(context.Enemy, "speedMultiplier", context.Agent.velocity.magnitude);
                 return BTStatus.Running;
             }
 
@@ -126,10 +133,39 @@ namespace AlgoritmaPuncakMod.AI
                 stoppingDistance: 0.6f,
                 allowPartialPath: true))
             {
+                // Idle/walk state; ensure chase flag off so lounge isn’t stuck
+                TrySetAnimatorBool(context.Enemy, "StartedChase", false);
+                TrySetAnimatorFloat(context.Enemy, "speedMultiplier", context.Agent.velocity.magnitude);
                 return BTStatus.Running;
             }
 
             return BTStatus.Failure;
+        }
+
+        private static void TrySetAnimatorBool(EnemyAI enemy, string name, bool value)
+        {
+            try
+            {
+                var anim = enemy?.creatureAnimator;
+                if (anim != null)
+                {
+                    anim.SetBool(name, value);
+                }
+            }
+            catch { }
+        }
+
+        private static void TrySetAnimatorFloat(EnemyAI enemy, string name, float value)
+        {
+            try
+            {
+                var anim = enemy?.creatureAnimator;
+                if (anim != null)
+                {
+                    anim.SetFloat(name, value);
+                }
+            }
+            catch { }
         }
     }
 
